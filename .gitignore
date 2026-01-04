@@ -1,0 +1,14 @@
+# Binaries
+engram-cogitator
+*.exe
+
+# Test database
+*.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store

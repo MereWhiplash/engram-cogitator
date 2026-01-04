@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  engram-cogitator:
+    build: .
+    container_name: engram-cogitator
+    stdin_open: true
+    volumes:
+      - ${EC_DATA_PATH:-./.claude}:/data
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - EMBEDDING_MODEL=${EC_EMBEDDING_MODEL:-nomic-embed-text}
+    depends_on:
+      ollama:
+        condition: service_healthy
+    command:
+      - --db-path
+      - /data/memory.db
+      - --ollama-url
+      - http://ollama:11434
+      - --embedding-model
+      - ${EC_EMBEDDING_MODEL:-nomic-embed-text}
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: engram-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Uncomment for GPU support
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  ollama_data:
