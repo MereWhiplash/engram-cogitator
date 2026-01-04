@@ -87,6 +87,43 @@ claude mcp add --transport stdio engram-cogitator \
 
 echo -e "${GREEN}MCP configuration added to .mcp.json${NC}"
 
+# Base URL for raw files
+EC_RAW_URL="https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main"
+
+# Install EC skill
+echo -e "${YELLOW}Installing EC skill...${NC}"
+mkdir -p .claude/skills/ec-remember
+curl -sSL "${EC_RAW_URL}/claude/skills/ec-remember/SKILL.md" \
+    -o .claude/skills/ec-remember/SKILL.md
+
+# Install session-start hook
+echo -e "${YELLOW}Installing session-start hook...${NC}"
+mkdir -p .claude/hooks
+curl -sSL "${EC_RAW_URL}/claude/hooks/ec-session-start.sh" \
+    -o .claude/hooks/ec-session-start.sh
+chmod +x .claude/hooks/ec-session-start.sh
+
+# Configure hooks in settings.json
+echo -e "${YELLOW}Configuring hooks...${NC}"
+if [ -f ".claude/settings.json" ]; then
+    echo -e "${YELLOW}Note: .claude/settings.json exists. You may need to manually merge EC hooks.${NC}"
+    echo -e "${YELLOW}See: ${EC_RAW_URL}/claude/settings.json${NC}"
+else
+    curl -sSL "${EC_RAW_URL}/claude/settings.json" \
+        -o .claude/settings.json
+fi
+
+# Add EC section to CLAUDE.md
+if [ -f "CLAUDE.md" ]; then
+    if ! grep -q "Engram Cogitator" CLAUDE.md; then
+        echo -e "${YELLOW}Adding EC section to CLAUDE.md...${NC}"
+        curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" >> CLAUDE.md
+    fi
+else
+    echo -e "${YELLOW}Creating CLAUDE.md with EC section...${NC}"
+    curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" > CLAUDE.md
+fi
+
 # Create Docker network if it doesn't exist
 if ! docker network inspect engram-network &> /dev/null; then
     echo -e "${YELLOW}Creating Docker network...${NC}"
@@ -117,14 +154,18 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 echo "Engram Cogitator is now configured for this project."
 echo ""
-echo "The following MCP tools are available:"
-echo "  - ec_add      : Add a memory (decision, learning, pattern)"
-echo "  - ec_search   : Search memories semantically"
-echo "  - ec_list     : List recent memories"
+echo "What's installed:"
+echo "  - MCP server config in .mcp.json"
+echo "  - ec:remember skill in .claude/skills/"
+echo "  - Session-start hook in .claude/hooks/"
+echo "  - EC section added to CLAUDE.md"
+echo ""
+echo "MCP tools available:"
+echo "  - ec_add       : Store a memory"
+echo "  - ec_search    : Find relevant memories"
+echo "  - ec_list      : List recent memories"
 echo "  - ec_invalidate: Soft-delete a memory"
 echo ""
-echo -e "${YELLOW}Note: Make sure Ollama is running before using Claude Code.${NC}"
+echo -e "${YELLOW}Restart Claude Code to activate.${NC}"
 echo "To start Ollama: docker start engram-ollama"
-echo ""
-echo "MCP server configured in .mcp.json - restart Claude Code to use."
 echo ""

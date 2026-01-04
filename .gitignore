@@ -12,3 +12,9 @@ engram-cogitator
 
 # OS
 .DS_Store
+
+# Build artifacts
+/server
+
+# Local MCP config
+.mcp.json

@@ -18,10 +18,10 @@ type Handler struct {
 
 // AddInput defines the input schema for ec_add
 type AddInput struct {
-	Type      string `json:"type" jsonschema:"required,enum=decision|learning|pattern,description=Type of memory: decision, learning, or pattern"`
-	Area      string `json:"area" jsonschema:"required,description=Domain area (e.g. auth, permissions, ui, api)"`
-	Content   string `json:"content" jsonschema:"required,description=The actual content to remember"`
-	Rationale string `json:"rationale,omitempty" jsonschema:"description=Why this matters or additional context"`
+	Type      string `json:"type" jsonschema:"required" jsonschema_description:"Type of memory: decision, learning, or pattern"`
+	Area      string `json:"area" jsonschema:"required" jsonschema_description:"Domain area (e.g. auth, permissions, ui, api)"`
+	Content   string `json:"content" jsonschema:"required" jsonschema_description:"The actual content to remember"`
+	Rationale string `json:"rationale,omitempty" jsonschema_description:"Why this matters or additional context"`
 }
 
 // AddOutput defines the output schema for ec_add
@@ -31,10 +31,10 @@ type AddOutput struct {
 
 // SearchInput defines the input schema for ec_search
 type SearchInput struct {
-	Query string `json:"query" jsonschema:"required,description=Search query to find relevant memories"`
-	Limit int    `json:"limit,omitempty" jsonschema:"description=Maximum number of results (default: 5)"`
-	Type  string `json:"type,omitempty" jsonschema:"enum=decision|learning|pattern,description=Filter by type"`
-	Area  string `json:"area,omitempty" jsonschema:"description=Filter by domain area"`
+	Query string `json:"query" jsonschema:"required" jsonschema_description:"Search query to find relevant memories"`
+	Limit int    `json:"limit,omitempty" jsonschema_description:"Maximum number of results (default: 5)"`
+	Type  string `json:"type,omitempty" jsonschema_description:"Filter by type (decision, learning, or pattern)"`
+	Area  string `json:"area,omitempty" jsonschema_description:"Filter by domain area"`
 }
 
 // SearchOutput defines the output schema for ec_search
@@ -44,8 +44,8 @@ type SearchOutput struct {
 
 // InvalidateInput defines the input schema for ec_invalidate
 type InvalidateInput struct {
-	ID           int64 `json:"id" jsonschema:"required,description=ID of the memory to invalidate"`
-	SupersededBy int64 `json:"superseded_by,omitempty" jsonschema:"description=ID of the memory that supersedes this one"`
+	ID           int64 `json:"id" jsonschema:"required" jsonschema_description:"ID of the memory to invalidate"`
+	SupersededBy int64 `json:"superseded_by,omitempty" jsonschema_description:"ID of the memory that supersedes this one"`
 }
 
 // InvalidateOutput defines the output schema for ec_invalidate
@@ -55,10 +55,10 @@ type InvalidateOutput struct {
 
 // ListInput defines the input schema for ec_list
 type ListInput struct {
-	Limit          int    `json:"limit,omitempty" jsonschema:"description=Maximum number of results (default: 10)"`
-	Type           string `json:"type,omitempty" jsonschema:"enum=decision|learning|pattern,description=Filter by type"`
-	Area           string `json:"area,omitempty" jsonschema:"description=Filter by domain area"`
-	IncludeInvalid bool   `json:"include_invalid,omitempty" jsonschema:"description=Include invalidated entries (default: false)"`
+	Limit          int    `json:"limit,omitempty" jsonschema_description:"Maximum number of results (default: 10)"`
+	Type           string `json:"type,omitempty" jsonschema_description:"Filter by type (decision, learning, or pattern)"`
+	Area           string `json:"area,omitempty" jsonschema_description:"Filter by domain area"`
+	IncludeInvalid bool   `json:"include_invalid,omitempty" jsonschema_description:"Include invalidated entries (default: false)"`
 }
 
 // ListOutput defines the output schema for ec_list

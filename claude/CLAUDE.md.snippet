@@ -1,0 +1,14 @@
+
+## Engram Cogitator (Persistent Memory)
+
+This project uses EC for cross-session memory. Relevant memories are auto-loaded at session start.
+
+**Tools available:**
+- `ec_add` - Store a memory (decision/learning/pattern)
+- `ec_search` - Find relevant memories semantically
+- `ec_list` - List recent memories
+- `ec_invalidate` - Soft-delete outdated memories
+
+**When to store:** Use the `ec:remember` skill when you make architectural decisions, discover gotchas, learn something project-specific that would be useful in future sessions, or when the user tells you to remember something.
+
+**Don't store:** Obvious things, temporary fixes, or duplicates (search first).

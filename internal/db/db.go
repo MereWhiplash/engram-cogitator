@@ -70,7 +70,7 @@ func (d *DB) initSchema() error {
 
 		CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings USING vec0(
 			memory_id INTEGER PRIMARY KEY,
-			embedding FLOAT[384]
+			embedding FLOAT[768]
 		);
 	`
 

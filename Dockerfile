@@ -1,8 +1,11 @@
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-bookworm AS builder
 
 # Install build dependencies for CGO (required for sqlite-vec)
-RUN apk add --no-cache gcc musl-dev
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -13,15 +16,21 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Tidy modules (in case go.sum is stale)
+RUN go mod tidy
+
 # Build with CGO enabled for sqlite-vec
 ENV CGO_ENABLED=1
 RUN go build -o /engram-cogitator ./cmd/server
 
 # Runtime stage
-FROM alpine:3.19
+FROM debian:bookworm-slim
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libsqlite3-0 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
 COPY --from=builder /engram-cogitator /usr/local/bin/engram-cogitator

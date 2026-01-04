@@ -1,123 +1,134 @@
-# Engram Cogitator (EC)
+<p align="center">
+  <img src="logo.jpg" alt="Engram Cogitator" width="300">
+</p>
 
-A local MCP server that gives Claude persistent, semantic memory across sessions.
+<h1 align="center">Engram Cogitator</h1>
 
-## What it does
+<p align="center">
+  <em>The Machine Spirit remembers what you forget.</em><br>
+  <em>(And unlike your da, it won't bring up that one time you dropped prod)</em>
+</p>
 
-EC stores decisions, learnings, and patterns from your coding sessions in a local SQLite database with vector embeddings. When you start a new session, relevant context is automatically surfaced.
+<p align="center">
+  Persistent semantic memory for Claude Code sessions.<br>
+  By the grace of the Omnissiah, your decisions shall not be lost to the warp.
+</p>
 
-**Tools provided:**
-- `ec_add` - Store a new memory (decision, learning, or pattern)
-- `ec_search` - Semantic search across memories
-- `ec_list` - List recent memories
-- `ec_invalidate` - Soft-delete outdated memories
+---
 
-## Quick Install
+## The Sacred Rites of Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install.sh | bash
 ```
 
-This will:
-1. Create `.claude/` directory with `memory.db`
-2. Add `memory.db` to `.gitignore`
-3. Start Ollama container with embedding model
-4. Configure MCP in `.claude/mcp.json`
+**Prerequisites:** Docker daemon running (the good kind of daemon, not the Chaos kind), Claude Code CLI installed. Offer a prayer to the Machine Spirit (optional but recommended). Cup of tea (mandatory if Irish).
 
-## Manual Setup
+## What It Does
 
-### Prerequisites
-- Docker
-- Claude Code CLI
+The Engram Cogitator serves as an auxiliary memory core for your Claude Code sessions. Like a good Irishman's grudge, it never forgets. It stores:
 
-### Steps
+- **Decisions** - Sacred architectural choices (why X over Y)
+- **Learnings** - Hard-won knowledge extracted from the codebase (the stuff that made you say "ah for feck's sake")
+- **Patterns** - The recurring litanies of your craft
 
-1. Clone this repo:
-   ```bash
-   git clone https://github.com/MereWhiplash/engram-cogitator.git
-   cd engram-cogitator
-   ```
+All memories are searchable by semantic similarity using local embeddings (Ollama + nomic-embed-text). No data leaves your machine - the Inquisition need not be concerned, and sure GDPR is grand.
 
-2. Build the image:
-   ```bash
-   docker build -t engram-cogitator:local .
-   ```
+## MCP Tools (The Four Holy Functions)
 
-3. Start Ollama:
-   ```bash
-   docker run -d --name engram-ollama --network engram-network -v ollama_data:/root/.ollama ollama/ollama
-   docker exec engram-ollama ollama pull nomic-embed-text
-   ```
+| Tool            | Purpose                                                                             |
+| --------------- | ----------------------------------------------------------------------------------- |
+| `ec_add`        | Commit a memory to the cogitator's data-stacks                                      |
+| `ec_search`     | Query the machine spirit for relevant wisdom                                        |
+| `ec_list`       | Enumerate recent memory engrams                                                     |
+| `ec_invalidate` | Perform the Rite of Deletion (soft-delete, like how you "deleted" your ex's number) |
 
-4. Add to your project's `.claude/mcp.json`:
-   ```json
-   {
-     "mcpServers": {
-       "engram-cogitator": {
-         "command": "docker",
-         "args": [
-           "run", "-i", "--rm",
-           "--network", "engram-network",
-           "-v", "${PWD}/.claude:/data",
-           "engram-cogitator:local",
-           "--db-path", "/data/memory.db",
-           "--ollama-url", "http://engram-ollama:11434"
-         ]
-       }
-     }
-   }
-   ```
+## Manual Setup (For the Truly Devoted)
 
-## Usage Examples
+If the sacred curl script fails you (sure it'll be grand):
 
-### Storing a decision
-```
-Claude, remember this: We decided to use server actions for all mutations
-because it keeps auth logic centralized. Store this as a decision in the
-"architecture" area.
+```bash
+# 1. Create the holy network
+docker network create engram-network
+
+# 2. Awaken the Ollama spirit
+docker run -d --name engram-ollama \
+  --network engram-network \
+  -v ollama_data:/root/.ollama \
+  ollama/ollama:latest
+
+# 3. Download the embedding model (the nomic rites)
+docker exec engram-ollama ollama pull nomic-embed-text
+
+# 4. Construct the cogitator (patience, Tech-Priest)
+docker build -t engram-cogitator:local .
+
+# 5. Anoint the MCP configuration
+claude mcp add --transport stdio engram-cogitator \
+  --scope project \
+  -- docker run -i --rm \
+  --network engram-network \
+  -v "$(pwd)/.claude:/data" \
+  engram-cogitator:local \
+  --db-path /data/memory.db \
+  --ollama-url http://engram-ollama:11434
+
+# 6. Restart Claude Code (the machine must be reborn)
 ```
 
-### Storing a learning
-```
-I just learned that the permissions system requires both org membership
-AND project access checks. Add this as a learning in "permissions".
-```
+## Troubleshooting (Appeasing the Machine Spirit)
 
-### Searching memories
-```
-What do we know about authentication patterns in this project?
-```
+### "readonly database" error
 
-## Configuration
+The data-shrine lacks proper permissions. The Machine Spirit is having a mare:
 
-Environment variables:
-- `EC_DATA_PATH` - Path to data directory (default: `./.claude`)
-- `EC_EMBEDDING_MODEL` - Ollama model for embeddings (default: `nomic-embed-text`)
-
-## Architecture
-
-```
-┌─────────────────────────────────────┐
-│  Claude Code                        │
-│  (uses MCP tools)                   │
-└──────────────┬──────────────────────┘
-               │ MCP (stdio)
-               ▼
-┌─────────────────────────────────────┐
-│  Engram Cogitator                   │
-│  (Go MCP Server)                    │
-│  - Tool handlers                    │
-│  - sqlite-vec queries              │
-└──────────────┬──────────────────────┘
-               │
-      ┌────────┴────────┐
-      ▼                 ▼
-┌───────────┐    ┌───────────────┐
-│ SQLite DB │    │    Ollama     │
-│ (vec0)    │    │ (embeddings)  │
-└───────────┘    └───────────────────┘
+```bash
+chmod 777 .claude
+rm .claude/memory.db  # Let the cogitator rebuild its engrams
 ```
 
-## License
+### "Dimension mismatch" error
 
-MIT
+The embedding vectors are misaligned. Like trying to fit a Dreadnought through a hobbit door. Purge and reconstruct:
+
+```bash
+rm .claude/memory.db
+```
+
+### MCP server not showing up
+
+The config must reside in `.mcp.json` (project root), not `.claude/mcp.json`. It's not hiding, you're just looking in the wrong place like your keys:
+
+```bash
+claude mcp list  # Should reveal engram-cogitator
+```
+
+### Alpine build failures
+
+EC requires Debian-based images. Ensure your Dockerfile uses `golang:1.23-bookworm`. Alpine is heresy. The Omnissiah has spoken.
+
+### Still not working?
+
+Have you tried turning it off and on again? Seriously though, restart Claude Code. Works 60% of the time, every time.
+
+## Development
+
+```bash
+# Run the sacred tests
+CGO_ENABLED=1 go test ./...
+
+# Forge the cogitator locally
+docker build -t engram-cogitator:local .
+```
+
+---
+
+<p align="center">
+  <em>Praise the Omnissiah. Store your memories. Ship your code.</em><br>
+  <em>The Emperor Protects, but version control saves.</em>
+</p>
+
+<p align="center">
+  Made with mass-produced servitor love in Ireland 🇮🇪<br>
+  <sub>Now stop reading READMEs and go build something, ya gobshite</sub>
+</p>

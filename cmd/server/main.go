@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -18,7 +19,21 @@ func main() {
 	dbPath := flag.String("db-path", "/data/memory.db", "Path to SQLite database")
 	ollamaURL := flag.String("ollama-url", "http://ollama:11434", "Ollama API URL")
 	embeddingModel := flag.String("embedding-model", "nomic-embed-text", "Ollama embedding model")
+
+	// CLI mode flags
+	listFlag := flag.Bool("list", false, "List recent memories (CLI mode)")
+	limitFlag := flag.Int("limit", 5, "Limit for list operation")
+
 	flag.Parse()
+
+	// CLI mode - list memories
+	if *listFlag {
+		if err := runList(*dbPath, *limitFlag); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	// Initialize database
 	database, err := db.New(*dbPath)
@@ -57,4 +72,27 @@ func main() {
 	if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
+}
+
+// runList handles CLI mode for listing memories
+func runList(dbPath string, limit int) error {
+	database, err := db.New(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer database.Close()
+
+	memories, err := database.List(limit, "", "", false)
+	if err != nil {
+		return fmt.Errorf("failed to list memories: %w", err)
+	}
+
+	if len(memories) == 0 {
+		return nil // Silent exit if no memories
+	}
+
+	for _, m := range memories {
+		fmt.Printf("[%s/%s] %s\n", m.Type, m.Area, m.Content)
+	}
+	return nil
 }
