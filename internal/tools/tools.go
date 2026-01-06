@@ -1,3 +1,4 @@
+// internal/tools/tools.go
 package tools
 
 import (
@@ -5,15 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/MereWhiplash/engram-cogitator/internal/db"
-	"github.com/MereWhiplash/engram-cogitator/internal/embed"
+	"github.com/MereWhiplash/engram-cogitator/internal/service"
+	"github.com/MereWhiplash/engram-cogitator/internal/storage"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Handler holds dependencies for tool handlers
 type Handler struct {
-	db       *db.DB
-	embedder *embed.Client
+	svc *service.Service
 }
 
 // AddInput defines the input schema for ec_add
@@ -26,7 +26,7 @@ type AddInput struct {
 
 // AddOutput defines the output schema for ec_add
 type AddOutput struct {
-	Memory *db.Memory `json:"memory"`
+	Memory *storage.Memory `json:"memory"`
 }
 
 // SearchInput defines the input schema for ec_search
@@ -39,7 +39,7 @@ type SearchInput struct {
 
 // SearchOutput defines the output schema for ec_search
 type SearchOutput struct {
-	Memories []db.Memory `json:"memories"`
+	Memories []storage.Memory `json:"memories"`
 }
 
 // InvalidateInput defines the input schema for ec_invalidate
@@ -63,10 +63,9 @@ type ListInput struct {
 
 // ListOutput defines the output schema for ec_list
 type ListOutput struct {
-	Memories []db.Memory `json:"memories"`
+	Memories []storage.Memory `json:"memories"`
 }
 
-// Helper functions for creating tool results
 func textResult(text string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: text}},
@@ -81,8 +80,8 @@ func errorResult(msg string) *mcp.CallToolResult {
 }
 
 // Register adds all EC tools to the MCP server
-func Register(server *mcp.Server, database *db.DB, embedder *embed.Client) {
-	h := &Handler{db: database, embedder: embedder}
+func Register(server *mcp.Server, svc *service.Service) {
+	h := &Handler{svc: svc}
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "ec_add",
@@ -105,25 +104,12 @@ func Register(server *mcp.Server, database *db.DB, embedder *embed.Client) {
 	}, h.List)
 }
 
-// Add handles the ec_add tool
 func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input AddInput) (*mcp.CallToolResult, AddOutput, error) {
 	if input.Type == "" || input.Area == "" || input.Content == "" {
 		return errorResult("type, area, and content are required"), AddOutput{}, nil
 	}
 
-	// Generate embedding for the content
-	textToEmbed := fmt.Sprintf("%s: %s", input.Area, input.Content)
-	if input.Rationale != "" {
-		textToEmbed += " " + input.Rationale
-	}
-
-	embedding, err := h.embedder.EmbedForStorage(textToEmbed)
-	if err != nil {
-		return errorResult(fmt.Sprintf("failed to generate embedding: %v", err)), AddOutput{}, nil
-	}
-
-	// Store in database
-	memory, err := h.db.Add(input.Type, input.Area, input.Content, input.Rationale, embedding)
+	memory, err := h.svc.Add(ctx, storage.MemoryType(input.Type), input.Area, input.Content, input.Rationale)
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to store memory: %v", err)), AddOutput{}, nil
 	}
@@ -132,7 +118,6 @@ func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input AddIn
 	return textResult(fmt.Sprintf("Memory added successfully:\n%s", string(result))), AddOutput{Memory: memory}, nil
 }
 
-// Search handles the ec_search tool
 func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
 	if input.Query == "" {
 		return errorResult("query is required"), SearchOutput{}, nil
@@ -143,27 +128,19 @@ func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input Se
 		limit = 5
 	}
 
-	// Generate embedding for the query
-	embedding, err := h.embedder.EmbedForSearch(input.Query)
-	if err != nil {
-		return errorResult(fmt.Sprintf("failed to generate embedding: %v", err)), SearchOutput{}, nil
-	}
-
-	// Search database
-	memories, err := h.db.Search(embedding, limit, input.Type, input.Area)
+	memories, err := h.svc.Search(ctx, input.Query, limit, storage.MemoryType(input.Type), input.Area)
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to search: %v", err)), SearchOutput{}, nil
 	}
 
 	if len(memories) == 0 {
-		return textResult("No matching memories found."), SearchOutput{Memories: []db.Memory{}}, nil
+		return textResult("No matching memories found."), SearchOutput{Memories: []storage.Memory{}}, nil
 	}
 
 	result, _ := json.MarshalIndent(memories, "", "  ")
 	return textResult(string(result)), SearchOutput{Memories: memories}, nil
 }
 
-// Invalidate handles the ec_invalidate tool
 func (h *Handler) Invalidate(ctx context.Context, req *mcp.CallToolRequest, input InvalidateInput) (*mcp.CallToolResult, InvalidateOutput, error) {
 	if input.ID == 0 {
 		return errorResult("id is required"), InvalidateOutput{}, nil
@@ -174,7 +151,7 @@ func (h *Handler) Invalidate(ctx context.Context, req *mcp.CallToolRequest, inpu
 		supersededBy = &input.SupersededBy
 	}
 
-	if err := h.db.Invalidate(input.ID, supersededBy); err != nil {
+	if err := h.svc.Invalidate(ctx, input.ID, supersededBy); err != nil {
 		return errorResult(fmt.Sprintf("failed to invalidate: %v", err)), InvalidateOutput{}, nil
 	}
 
@@ -186,20 +163,19 @@ func (h *Handler) Invalidate(ctx context.Context, req *mcp.CallToolRequest, inpu
 	return textResult(msg), InvalidateOutput{Message: msg}, nil
 }
 
-// List handles the ec_list tool
 func (h *Handler) List(ctx context.Context, req *mcp.CallToolRequest, input ListInput) (*mcp.CallToolResult, ListOutput, error) {
 	limit := input.Limit
 	if limit <= 0 {
 		limit = 10
 	}
 
-	memories, err := h.db.List(limit, input.Type, input.Area, input.IncludeInvalid)
+	memories, err := h.svc.List(ctx, limit, storage.MemoryType(input.Type), input.Area, input.IncludeInvalid)
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to list: %v", err)), ListOutput{}, nil
 	}
 
 	if len(memories) == 0 {
-		return textResult("No memories found."), ListOutput{Memories: []db.Memory{}}, nil
+		return textResult("No memories found."), ListOutput{Memories: []storage.Memory{}}, nil
 	}
 
 	result, _ := json.MarshalIndent(memories, "", "  ")

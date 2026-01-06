@@ -1,3 +1,4 @@
+// cmd/server/main.go
 package main
 
 import (
@@ -9,8 +10,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/MereWhiplash/engram-cogitator/internal/db"
-	"github.com/MereWhiplash/engram-cogitator/internal/embed"
+	"github.com/MereWhiplash/engram-cogitator/internal/embedder"
+	"github.com/MereWhiplash/engram-cogitator/internal/service"
+	"github.com/MereWhiplash/engram-cogitator/internal/storage"
 	"github.com/MereWhiplash/engram-cogitator/internal/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -35,15 +37,18 @@ func main() {
 		return
 	}
 
-	// Initialize database
-	database, err := db.New(*dbPath)
+	// Initialize storage
+	store, err := storage.NewSQLite(*dbPath)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		log.Fatalf("Failed to initialize storage: %v", err)
 	}
-	defer database.Close()
+	defer store.Close()
 
-	// Initialize embedding client
-	embedder := embed.New(*ollamaURL, *embeddingModel)
+	// Initialize embedder
+	emb := embedder.NewOllama(*ollamaURL, *embeddingModel)
+
+	// Create service
+	svc := service.New(store, emb)
 
 	// Create MCP server
 	server := mcp.NewServer(&mcp.Implementation{
@@ -52,7 +57,7 @@ func main() {
 	}, nil)
 
 	// Register tools
-	tools.Register(server, database, embedder)
+	tools.Register(server, svc)
 
 	// Handle graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -74,21 +79,21 @@ func main() {
 	}
 }
 
-// runList handles CLI mode for listing memories
 func runList(dbPath string, limit int) error {
-	database, err := db.New(dbPath)
+	store, err := storage.NewSQLite(dbPath)
 	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
+		return fmt.Errorf("failed to open storage: %w", err)
 	}
-	defer database.Close()
+	defer store.Close()
 
-	memories, err := database.List(limit, "", "", false)
+	ctx := context.Background()
+	memories, err := store.List(ctx, storage.ListOpts{Limit: limit})
 	if err != nil {
 		return fmt.Errorf("failed to list memories: %w", err)
 	}
 
 	if len(memories) == 0 {
-		return nil // Silent exit if no memories
+		return nil
 	}
 
 	for _, m := range memories {
