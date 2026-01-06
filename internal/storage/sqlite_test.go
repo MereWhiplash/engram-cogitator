@@ -27,7 +27,7 @@ func TestSQLiteStorage_Add(t *testing.T) {
 
 	ctx := context.Background()
 	mem := storage.Memory{
-		Type:      "decision",
+		Type:      storage.TypeDecision,
 		Area:      "auth",
 		Content:   "Use JWT tokens",
 		Rationale: "Stateless auth",
@@ -42,7 +42,7 @@ func TestSQLiteStorage_Add(t *testing.T) {
 	if result.ID == 0 {
 		t.Error("expected non-zero ID")
 	}
-	if result.Type != "decision" {
+	if result.Type != storage.TypeDecision {
 		t.Errorf("expected type 'decision', got %q", result.Type)
 	}
 	if !result.IsValid {
@@ -68,7 +68,7 @@ func TestSQLiteStorage_Search(t *testing.T) {
 
 	// Add a memory first
 	mem := storage.Memory{
-		Type:    "decision",
+		Type:    storage.TypeDecision,
 		Area:    "auth",
 		Content: "Use JWT tokens",
 	}
@@ -110,7 +110,7 @@ func TestSQLiteStorage_List(t *testing.T) {
 	// Add memories
 	for i := 0; i < 3; i++ {
 		mem := storage.Memory{
-			Type:    "learning",
+			Type:    storage.TypeLearning,
 			Area:    "api",
 			Content: fmt.Sprintf("Learning %d", i),
 		}
@@ -148,7 +148,7 @@ func TestSQLiteStorage_Invalidate(t *testing.T) {
 	ctx := context.Background()
 
 	mem := storage.Memory{
-		Type:    "decision",
+		Type:    storage.TypeDecision,
 		Area:    "auth",
 		Content: "Old decision",
 	}
@@ -172,5 +172,33 @@ func TestSQLiteStorage_Invalidate(t *testing.T) {
 
 	if len(results) != 0 {
 		t.Errorf("expected 0 results after invalidation, got %d", len(results))
+	}
+}
+
+func TestSQLiteStorage_Add_InvalidType(t *testing.T) {
+	f, err := os.CreateTemp("", "test-*.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	f.Close()
+
+	store, err := storage.NewSQLite(f.Name())
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	mem := storage.Memory{
+		Type:    "invalid_type",
+		Area:    "auth",
+		Content: "Should fail",
+	}
+	embedding := make([]float32, 768)
+
+	_, err = store.Add(ctx, mem, embedding)
+	if err == nil {
+		t.Error("expected error for invalid type, got nil")
 	}
 }

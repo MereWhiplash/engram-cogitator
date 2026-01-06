@@ -66,6 +66,10 @@ func (s *SQLite) Close() error {
 }
 
 func (s *SQLite) Add(ctx context.Context, mem Memory, embedding []float32) (*Memory, error) {
+	if err := mem.Type.Validate(); err != nil {
+		return nil, err
+	}
+
 	tx, err := s.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -220,13 +224,15 @@ func (s *SQLite) queryMemories(ctx context.Context, query string, args ...interf
 	var memories []Memory
 	for rows.Next() {
 		var m Memory
+		var memType string
 		var supersededBy sql.NullInt64
 		var rationale sql.NullString
 
-		if err := rows.Scan(&m.ID, &m.Type, &m.Area, &m.Content, &rationale, &m.IsValid, &supersededBy, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &memType, &m.Area, &m.Content, &rationale, &m.IsValid, &supersededBy, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 
+		m.Type = MemoryType(memType)
 		if rationale.Valid {
 			m.Rationale = rationale.String
 		}

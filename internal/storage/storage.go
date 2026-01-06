@@ -3,14 +3,41 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
+// MemoryType represents the type of memory entry
+type MemoryType string
+
+const (
+	TypeDecision MemoryType = "decision"
+	TypeLearning MemoryType = "learning"
+	TypePattern  MemoryType = "pattern"
+)
+
+// Valid returns true if the MemoryType is a known valid type
+func (t MemoryType) Valid() bool {
+	switch t {
+	case TypeDecision, TypeLearning, TypePattern:
+		return true
+	}
+	return false
+}
+
+// Validate returns an error if the MemoryType is invalid
+func (t MemoryType) Validate() error {
+	if !t.Valid() {
+		return fmt.Errorf("invalid memory type %q: must be decision, learning, or pattern", t)
+	}
+	return nil
+}
+
 // Memory represents a stored memory entry
 type Memory struct {
-	ID           int64     `json:"id"`
-	Type         string    `json:"type"`
-	Area         string    `json:"area"`
+	ID           int64      `json:"id"`
+	Type         MemoryType `json:"type"`
+	Area         string     `json:"area"`
 	Content      string    `json:"content"`
 	Rationale    string    `json:"rationale,omitempty"`
 	IsValid      bool      `json:"is_valid"`
@@ -25,7 +52,7 @@ type Memory struct {
 // SearchOpts configures search behavior
 type SearchOpts struct {
 	Limit int
-	Type  string
+	Type  MemoryType
 	Area  string
 	Repo  string // team mode only
 }
@@ -33,7 +60,7 @@ type SearchOpts struct {
 // ListOpts configures list behavior
 type ListOpts struct {
 	Limit          int
-	Type           string
+	Type           MemoryType
 	Area           string
 	Repo           string // team mode only
 	IncludeInvalid bool
