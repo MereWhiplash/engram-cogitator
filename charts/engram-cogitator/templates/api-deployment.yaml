@@ -30,7 +30,11 @@ spec:
           command: ['sh', '-c', 'until nc -z {{ include "engram-cogitator.postgres.name" . }} 5432; do echo waiting for postgres; sleep 2; done']
         - name: migrate
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          command: ["/ec-api", "migrate"]
+          command: ["/ec-api"]
+          args:
+            - --migrate
+            - --storage-driver=postgres
+            - --postgres-dsn=$(DATABASE_URL)
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:
