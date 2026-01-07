@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
+	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -13,10 +13,10 @@ import (
 
 // MongoDB implements Storage using MongoDB with Atlas Vector Search
 type MongoDB struct {
-	client    *mongo.Client
-	db        *mongo.Database
-	memories  *mongo.Collection
-	idCounter int64
+	client   *mongo.Client
+	db       *mongo.Database
+	memories *mongo.Collection
+	counters *mongo.Collection
 }
 
 // memoryDoc is the MongoDB document structure
@@ -50,23 +50,17 @@ func NewMongoDB(ctx context.Context, uri, database string) (*MongoDB, error) {
 	}
 
 	db := client.Database(database)
-	memories := db.Collection("memories")
 
 	m := &MongoDB{
 		client:   client,
 		db:       db,
-		memories: memories,
+		memories: db.Collection("memories"),
+		counters: db.Collection("counters"),
 	}
 
 	if err := m.initIndexes(ctx); err != nil {
 		client.Disconnect(ctx)
 		return nil, fmt.Errorf("failed to create indexes: %w", err)
-	}
-
-	// Initialize ID counter from max existing ID
-	if err := m.initIDCounter(ctx); err != nil {
-		client.Disconnect(ctx)
-		return nil, fmt.Errorf("failed to init id counter: %w", err)
 	}
 
 	return m, nil
@@ -86,19 +80,29 @@ func (m *MongoDB) initIndexes(ctx context.Context) error {
 	return err
 }
 
-func (m *MongoDB) initIDCounter(ctx context.Context) error {
-	opts := options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})
-	var doc memoryDoc
-	err := m.memories.FindOne(ctx, bson.D{}, opts).Decode(&doc)
-	if err == mongo.ErrNoDocuments {
-		m.idCounter = 0
-		return nil
+// nextID atomically generates the next memory ID using a counters collection.
+// This is safe for multi-instance deployments.
+func (m *MongoDB) nextID(ctx context.Context) (int64, error) {
+	opts := options.FindOneAndUpdate().
+		SetUpsert(true).
+		SetReturnDocument(options.After)
+
+	var result struct {
+		Value int64 `bson:"value"`
 	}
+
+	err := m.counters.FindOneAndUpdate(
+		ctx,
+		bson.D{{Key: "_id", Value: "memory_id"}},
+		bson.D{{Key: "$inc", Value: bson.D{{Key: "value", Value: 1}}}},
+		opts,
+	).Decode(&result)
+
 	if err != nil {
-		return err
+		return 0, fmt.Errorf("failed to generate ID: %w", err)
 	}
-	m.idCounter = doc.ID
-	return nil
+
+	return result.Value, nil
 }
 
 func (m *MongoDB) Close() error {
@@ -108,7 +112,10 @@ func (m *MongoDB) Close() error {
 }
 
 func (m *MongoDB) Add(ctx context.Context, mem Memory, embedding []float32) (*Memory, error) {
-	id := atomic.AddInt64(&m.idCounter, 1)
+	id, err := m.nextID(ctx)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 
 	doc := memoryDoc{
@@ -125,7 +132,7 @@ func (m *MongoDB) Add(ctx context.Context, mem Memory, embedding []float32) (*Me
 	doc.Author.Name = mem.AuthorName
 	doc.Author.Email = mem.AuthorEmail
 
-	_, err := m.memories.InsertOne(ctx, doc)
+	_, err = m.memories.InsertOne(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert memory: %w", err)
 	}
@@ -179,6 +186,7 @@ func (m *MongoDB) Search(ctx context.Context, embedding []float32, opts SearchOp
 	cursor, err := m.memories.Aggregate(ctx, pipeline)
 	if err != nil {
 		// Fallback to regular query if vector search not available
+		log.Printf("WARNING: Atlas Vector Search unavailable, falling back to list query (no semantic search): %v", err)
 		return m.listFallback(ctx, opts)
 	}
 	defer cursor.Close(ctx)

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go"
 )
@@ -65,6 +65,9 @@ func (p *Postgres) initSchema(ctx context.Context) error {
 		CREATE INDEX IF NOT EXISTS idx_memories_is_valid ON memories(is_valid);
 		CREATE INDEX IF NOT EXISTS idx_memories_repo ON memories(repo);
 		CREATE INDEX IF NOT EXISTS idx_memories_author ON memories(author_email);
+
+		CREATE INDEX IF NOT EXISTS idx_embeddings_vector
+		ON memory_embeddings USING hnsw (embedding vector_cosine_ops);
 	`
 	_, err := p.pool.Exec(ctx, schema)
 	return err
@@ -203,16 +206,16 @@ func (p *Postgres) List(ctx context.Context, opts ListOpts) ([]Memory, error) {
 }
 
 func (p *Postgres) Invalidate(ctx context.Context, id int64, supersededBy *int64) error {
-	var result pgx.Rows
+	var result pgconn.CommandTag
 	var err error
 
 	if supersededBy != nil {
-		result, err = p.pool.Query(ctx,
+		result, err = p.pool.Exec(ctx,
 			`UPDATE memories SET is_valid = FALSE, superseded_by = $1 WHERE id = $2`,
 			*supersededBy, id,
 		)
 	} else {
-		result, err = p.pool.Query(ctx,
+		result, err = p.pool.Exec(ctx,
 			`UPDATE memories SET is_valid = FALSE WHERE id = $1`,
 			id,
 		)
@@ -220,7 +223,10 @@ func (p *Postgres) Invalidate(ctx context.Context, id int64, supersededBy *int64
 	if err != nil {
 		return err
 	}
-	result.Close()
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("memory with id %d not found", id)
+	}
 
 	return nil
 }

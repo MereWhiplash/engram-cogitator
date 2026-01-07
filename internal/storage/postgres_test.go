@@ -5,14 +5,37 @@ import (
 	"os"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/MereWhiplash/engram-cogitator/internal/storage"
 )
+
+// cleanupPostgres removes all test data before each test
+func cleanupPostgres(t *testing.T, dsn string) {
+	t.Helper()
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("failed to connect for cleanup: %v", err)
+	}
+	defer pool.Close()
+
+	_, err = pool.Exec(ctx, "DELETE FROM memory_embeddings")
+	if err != nil {
+		t.Fatalf("failed to cleanup embeddings: %v", err)
+	}
+	_, err = pool.Exec(ctx, "DELETE FROM memories")
+	if err != nil {
+		t.Fatalf("failed to cleanup memories: %v", err)
+	}
+}
 
 func TestPostgresStorage_Add(t *testing.T) {
 	dsn := os.Getenv("TEST_POSTGRES_DSN")
 	if dsn == "" {
 		t.Skip("TEST_POSTGRES_DSN not set, skipping Postgres tests")
 	}
+	cleanupPostgres(t, dsn)
 
 	ctx := context.Background()
 	store, err := storage.NewPostgres(ctx, dsn)
@@ -51,6 +74,7 @@ func TestPostgresStorage_Search(t *testing.T) {
 	if dsn == "" {
 		t.Skip("TEST_POSTGRES_DSN not set, skipping Postgres tests")
 	}
+	cleanupPostgres(t, dsn)
 
 	ctx := context.Background()
 	store, err := storage.NewPostgres(ctx, dsn)
@@ -92,6 +116,7 @@ func TestPostgresStorage_SearchByRepo(t *testing.T) {
 	if dsn == "" {
 		t.Skip("TEST_POSTGRES_DSN not set, skipping Postgres tests")
 	}
+	cleanupPostgres(t, dsn)
 
 	ctx := context.Background()
 	store, err := storage.NewPostgres(ctx, dsn)
