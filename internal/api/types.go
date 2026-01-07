@@ -32,7 +32,15 @@ type SearchResponse struct {
 
 // ListResponse is the response for GET /v1/memories
 type ListResponse struct {
-	Memories []storage.Memory `json:"memories"`
+	Memories   []storage.Memory `json:"memories"`
+	Pagination *PaginationInfo  `json:"pagination,omitempty"`
+}
+
+// PaginationInfo provides pagination metadata
+type PaginationInfo struct {
+	Limit  int  `json:"limit"`
+	Offset int  `json:"offset"`
+	HasMore bool `json:"has_more"`
 }
 
 // InvalidateRequest is the request body for PUT /v1/memories/:id/invalidate

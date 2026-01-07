@@ -3,17 +3,21 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/MereWhiplash/engram-cogitator/internal/service"
+	"github.com/MereWhiplash/engram-cogitator/internal/storage"
 )
 
 // Handlers holds HTTP handler dependencies
 type Handlers struct {
-	svc *service.Service
+	svc         *service.Service
+	healthCheck func() error // optional health check function
 }
 
 // NewHandlers creates new API handlers
@@ -21,18 +25,38 @@ func NewHandlers(svc *service.Service) *Handlers {
 	return &Handlers{svc: svc}
 }
 
+// SetHealthCheck sets an optional health check function for deeper health verification
+func (h *Handlers) SetHealthCheck(check func() error) {
+	h.healthCheck = check
+}
+
 func (h *Handlers) respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("failed to encode response: %v", err)
+	}
 }
 
 func (h *Handlers) respondError(w http.ResponseWriter, status int, msg string) {
 	h.respondJSON(w, status, ErrorResponse{Error: msg})
 }
 
+// logError logs an error with request context
+func (h *Handlers) logError(r *http.Request, operation string, err error) {
+	requestID := GetRequestID(r.Context())
+	log.Printf("[%s] %s error: %v", requestID, operation, err)
+}
+
 // Health handles GET /health
 func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
+	if h.healthCheck != nil {
+		if err := h.healthCheck(); err != nil {
+			h.logError(r, "health", err)
+			h.respondJSON(w, http.StatusServiceUnavailable, HealthResponse{Status: "unhealthy"})
+			return
+		}
+	}
 	h.respondJSON(w, http.StatusOK, HealthResponse{Status: "ok"})
 }
 
@@ -62,7 +86,8 @@ func (h *Handlers) Add(w http.ResponseWriter, r *http.Request) {
 		Repo:        GetRepo(ctx),
 	})
 	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		h.logError(r, "add", err)
+		h.respondError(w, http.StatusInternalServerError, "failed to create memory")
 		return
 	}
 
@@ -91,7 +116,8 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 
 	memories, err := h.svc.SearchWithRepo(ctx, req.Query, limit, req.Type, req.Area, req.Repo)
 	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		h.logError(r, "search", err)
+		h.respondError(w, http.StatusInternalServerError, "failed to search memories")
 		return
 	}
 
@@ -107,6 +133,13 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	offset := 0
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
 	memType := r.URL.Query().Get("type")
 	area := r.URL.Query().Get("area")
 	repo := r.URL.Query().Get("repo")
@@ -114,13 +147,27 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	memories, err := h.svc.ListWithRepo(ctx, limit, memType, area, repo, includeInvalid)
+	// Request one extra to determine if there are more results
+	memories, err := h.svc.ListWithRepo(ctx, limit+1, memType, area, repo, includeInvalid, offset)
 	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		h.logError(r, "list", err)
+		h.respondError(w, http.StatusInternalServerError, "failed to list memories")
 		return
 	}
 
-	h.respondJSON(w, http.StatusOK, ListResponse{Memories: memories})
+	hasMore := len(memories) > limit
+	if hasMore {
+		memories = memories[:limit]
+	}
+
+	h.respondJSON(w, http.StatusOK, ListResponse{
+		Memories: memories,
+		Pagination: &PaginationInfo{
+			Limit:   limit,
+			Offset:  offset,
+			HasMore: hasMore,
+		},
+	})
 }
 
 // Invalidate handles PUT /v1/memories/:id/invalidate
@@ -143,7 +190,12 @@ func (h *Handlers) Invalidate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if err := h.svc.Invalidate(ctx, id, req.SupersededBy); err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		if errors.Is(err, storage.ErrNotFound) {
+			h.respondError(w, http.StatusNotFound, "memory not found")
+			return
+		}
+		h.logError(r, "invalidate", err)
+		h.respondError(w, http.StatusInternalServerError, "failed to invalidate memory")
 		return
 	}
 

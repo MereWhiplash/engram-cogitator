@@ -2,9 +2,13 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
+
+// ErrNotFound is returned when a memory is not found
+var ErrNotFound = errors.New("memory not found")
 
 // MemoryType represents the type of memory entry
 type MemoryType string
@@ -59,6 +63,7 @@ type SearchOpts struct {
 // ListOpts configures list behavior
 type ListOpts struct {
 	Limit          int
+	Offset         int
 	Type           MemoryType
 	Area           string
 	Repo           string // team mode only

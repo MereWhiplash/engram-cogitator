@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -26,8 +27,10 @@ func (m *mockEmbedder) EmbedForSearch(query string) ([]float32, error) {
 }
 
 type mockStorage struct {
-	memories []storage.Memory
-	nextID   int64
+	memories          []storage.Memory
+	nextID            int64
+	invalidateErr     error
+	invalidatedIDs    []int64
 }
 
 func (m *mockStorage) Add(ctx context.Context, mem storage.Memory, embedding []float32) (*storage.Memory, error) {
@@ -43,10 +46,34 @@ func (m *mockStorage) Search(ctx context.Context, embedding []float32, opts stor
 }
 
 func (m *mockStorage) List(ctx context.Context, opts storage.ListOpts) ([]storage.Memory, error) {
-	return m.memories, nil
+	// Apply offset and limit
+	start := opts.Offset
+	if start > len(m.memories) {
+		return []storage.Memory{}, nil
+	}
+	end := start + opts.Limit
+	if end > len(m.memories) {
+		end = len(m.memories)
+	}
+	return m.memories[start:end], nil
 }
 
 func (m *mockStorage) Invalidate(ctx context.Context, id int64, supersededBy *int64) error {
+	if m.invalidateErr != nil {
+		return m.invalidateErr
+	}
+	// Check if memory exists
+	found := false
+	for _, mem := range m.memories {
+		if mem.ID == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return storage.ErrNotFound
+	}
+	m.invalidatedIDs = append(m.invalidatedIDs, id)
 	return nil
 }
 
@@ -158,5 +185,163 @@ func TestSearch(t *testing.T) {
 	json.NewDecoder(rr.Body).Decode(&resp)
 	if len(resp.Memories) != 1 {
 		t.Errorf("expected 1 memory, got %d", len(resp.Memories))
+	}
+}
+
+func TestList(t *testing.T) {
+	_, r := setupTestServer()
+
+	// First add some memories
+	for i := 0; i < 3; i++ {
+		addBody := api.AddRequest{
+			Type:    "decision",
+			Area:    "auth",
+			Content: "Memory content",
+		}
+		jsonBody, _ := json.Marshal(addBody)
+		req := httptest.NewRequest("POST", "/v1/memories", bytes.NewReader(jsonBody))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+	}
+
+	// Test basic list
+	req := httptest.NewRequest("GET", "/v1/memories", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+
+	var resp api.ListResponse
+	json.NewDecoder(rr.Body).Decode(&resp)
+	if len(resp.Memories) != 3 {
+		t.Errorf("expected 3 memories, got %d", len(resp.Memories))
+	}
+	if resp.Pagination == nil {
+		t.Error("expected pagination info")
+	}
+
+	// Test with limit
+	req = httptest.NewRequest("GET", "/v1/memories?limit=2", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	json.NewDecoder(rr.Body).Decode(&resp)
+	if len(resp.Memories) != 2 {
+		t.Errorf("expected 2 memories with limit, got %d", len(resp.Memories))
+	}
+	if !resp.Pagination.HasMore {
+		t.Error("expected HasMore to be true")
+	}
+
+	// Test with offset
+	req = httptest.NewRequest("GET", "/v1/memories?limit=2&offset=2", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	json.NewDecoder(rr.Body).Decode(&resp)
+	if len(resp.Memories) != 1 {
+		t.Errorf("expected 1 memory with offset, got %d", len(resp.Memories))
+	}
+	if resp.Pagination.HasMore {
+		t.Error("expected HasMore to be false")
+	}
+}
+
+func TestInvalidate(t *testing.T) {
+	_, r := setupTestServer()
+
+	// First add a memory
+	addBody := api.AddRequest{
+		Type:    "decision",
+		Area:    "auth",
+		Content: "Use JWT tokens",
+	}
+	jsonBody, _ := json.Marshal(addBody)
+	req := httptest.NewRequest("POST", "/v1/memories", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	var addResp api.AddResponse
+	json.NewDecoder(rr.Body).Decode(&addResp)
+	memID := addResp.Memory.ID
+
+	// Test successful invalidation
+	req = httptest.NewRequest("PUT", fmt.Sprintf("/v1/memories/%d/invalidate", memID), nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var invResp api.InvalidateResponse
+	json.NewDecoder(rr.Body).Decode(&invResp)
+	if invResp.Message == "" {
+		t.Error("expected message in response")
+	}
+
+	// Test with superseded_by
+	addBody2 := api.AddRequest{
+		Type:    "decision",
+		Area:    "auth",
+		Content: "Use OAuth2",
+	}
+	jsonBody, _ = json.Marshal(addBody2)
+	req = httptest.NewRequest("POST", "/v1/memories", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	var addResp2 api.AddResponse
+	json.NewDecoder(rr.Body).Decode(&addResp2)
+	newMemID := addResp2.Memory.ID
+
+	// Add another memory to invalidate with superseded_by
+	addBody3 := api.AddRequest{
+		Type:    "decision",
+		Area:    "auth",
+		Content: "Third memory",
+	}
+	jsonBody, _ = json.Marshal(addBody3)
+	req = httptest.NewRequest("POST", "/v1/memories", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	var addResp3 api.AddResponse
+	json.NewDecoder(rr.Body).Decode(&addResp3)
+	thirdMemID := addResp3.Memory.ID
+
+	invBody := api.InvalidateRequest{SupersededBy: &newMemID}
+	jsonBody, _ = json.Marshal(invBody)
+	req = httptest.NewRequest("PUT", fmt.Sprintf("/v1/memories/%d/invalidate", thirdMemID), bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200 for superseded_by, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Test invalid ID format
+	req = httptest.NewRequest("PUT", "/v1/memories/invalid/invalidate", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400 for invalid ID, got %d", rr.Code)
+	}
+
+	// Test not found
+	req = httptest.NewRequest("PUT", "/v1/memories/99999/invalidate", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected status 404 for not found, got %d", rr.Code)
 	}
 }

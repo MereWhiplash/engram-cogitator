@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -36,6 +37,12 @@ func main() {
 
 	// Migrate flag
 	migrateOnly := flag.Bool("migrate", false, "Run migrations and exit")
+
+	// Rate limiting flags
+	rateLimit := flag.Int("rate-limit", 100, "Requests per minute per IP (0 to disable)")
+
+	// CORS flags
+	corsOrigins := flag.String("cors-origins", "", "Comma-separated list of allowed CORS origins (empty to disable)")
 
 	flag.Parse()
 
@@ -76,11 +83,39 @@ func main() {
 	// Create handlers
 	handlers := api.NewHandlers(svc)
 
+	// Set health check to verify storage connectivity
+	handlers.SetHealthCheck(func() error {
+		// Simple connectivity check - list with limit 1
+		_, err := store.List(context.Background(), storage.ListOpts{Limit: 1})
+		return err
+	})
+
 	// Setup router
 	r := chi.NewRouter()
+
+	// Core middleware
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(api.RequestID)
+	r.Use(api.MaxBodySize)
+
+	// Rate limiting (if enabled)
+	if *rateLimit > 0 {
+		limiter := api.NewRateLimiter(*rateLimit, time.Minute)
+		r.Use(limiter.Middleware)
+	}
+
+	// CORS (if enabled)
+	if *corsOrigins != "" {
+		origins := strings.Split(*corsOrigins, ",")
+		for i := range origins {
+			origins[i] = strings.TrimSpace(origins[i])
+		}
+		r.Use(api.CORSMiddleware(origins))
+	}
+
+	// Git context extraction
 	r.Use(api.GitContext)
 
 	// Routes

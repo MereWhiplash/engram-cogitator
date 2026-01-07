@@ -146,9 +146,10 @@ func (s *Service) SearchWithRepo(ctx context.Context, query string, limit int, m
 }
 
 // ListWithRepo returns memories with optional repo filter
-func (s *Service) ListWithRepo(ctx context.Context, limit int, memType, area, repo string, includeInvalid bool) ([]storage.Memory, error) {
+func (s *Service) ListWithRepo(ctx context.Context, limit int, memType, area, repo string, includeInvalid bool, offset int) ([]storage.Memory, error) {
 	opts := storage.ListOpts{
 		Limit:          limit,
+		Offset:         offset,
 		Type:           storage.MemoryType(memType),
 		Area:           area,
 		Repo:           repo,
