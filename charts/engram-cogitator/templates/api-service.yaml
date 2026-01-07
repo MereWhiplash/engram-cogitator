@@ -1,0 +1,18 @@
+# charts/engram-cogitator/templates/api-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "engram-cogitator.api.name" . }}
+  labels:
+    {{- include "engram-cogitator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "engram-cogitator.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api
