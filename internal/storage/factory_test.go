@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 )
 
 func TestNew_SQLite(t *testing.T) {
@@ -27,8 +28,8 @@ func TestNew_SQLite(t *testing.T) {
 	defer store.Close()
 
 	// Verify it works
-	mem := storage.Memory{
-		Type:    storage.TypeDecision,
+	mem := types.Memory{
+		Type:    types.TypeDecision,
 		Area:    "test",
 		Content: "Test content",
 	}

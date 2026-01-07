@@ -10,10 +10,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/MereWhiplash/engram-cogitator/internal/api"
+	"github.com/MereWhiplash/engram-cogitator/internal/apitypes"
 	"github.com/MereWhiplash/engram-cogitator/internal/service"
-	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
+	"github.com/go-chi/chi/v5"
 )
 
 type mockEmbedder struct{}
@@ -27,13 +28,13 @@ func (m *mockEmbedder) EmbedForSearch(query string) ([]float32, error) {
 }
 
 type mockStorage struct {
-	memories          []storage.Memory
-	nextID            int64
-	invalidateErr     error
-	invalidatedIDs    []int64
+	memories       []types.Memory
+	nextID         int64
+	invalidateErr  error
+	invalidatedIDs []int64
 }
 
-func (m *mockStorage) Add(ctx context.Context, mem storage.Memory, embedding []float32) (*storage.Memory, error) {
+func (m *mockStorage) Add(ctx context.Context, mem types.Memory, embedding []float32) (*types.Memory, error) {
 	m.nextID++
 	mem.ID = m.nextID
 	mem.IsValid = true
@@ -41,15 +42,15 @@ func (m *mockStorage) Add(ctx context.Context, mem storage.Memory, embedding []f
 	return &mem, nil
 }
 
-func (m *mockStorage) Search(ctx context.Context, embedding []float32, opts storage.SearchOpts) ([]storage.Memory, error) {
+func (m *mockStorage) Search(ctx context.Context, embedding []float32, opts types.SearchOpts) ([]types.Memory, error) {
 	return m.memories, nil
 }
 
-func (m *mockStorage) List(ctx context.Context, opts storage.ListOpts) ([]storage.Memory, error) {
+func (m *mockStorage) List(ctx context.Context, opts types.ListOpts) ([]types.Memory, error) {
 	// Apply offset and limit
 	start := opts.Offset
 	if start > len(m.memories) {
-		return []storage.Memory{}, nil
+		return []types.Memory{}, nil
 	}
 	end := start + opts.Limit
 	if end > len(m.memories) {
@@ -71,7 +72,7 @@ func (m *mockStorage) Invalidate(ctx context.Context, id int64, supersededBy *in
 		}
 	}
 	if !found {
-		return storage.ErrNotFound
+		return types.ErrNotFound
 	}
 	m.invalidatedIDs = append(m.invalidatedIDs, id)
 	return nil
@@ -110,7 +111,7 @@ func TestHealth(t *testing.T) {
 		t.Errorf("expected status 200, got %d", rr.Code)
 	}
 
-	var resp api.HealthResponse
+	var resp apitypes.HealthResponse
 	json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Status != "ok" {
 		t.Errorf("expected status 'ok', got %q", resp.Status)
@@ -120,7 +121,7 @@ func TestHealth(t *testing.T) {
 func TestAdd(t *testing.T) {
 	_, r := setupTestServer()
 
-	body := api.AddRequest{
+	body := apitypes.AddRequest{
 		Type:    "decision",
 		Area:    "auth",
 		Content: "Use JWT tokens",
@@ -140,7 +141,7 @@ func TestAdd(t *testing.T) {
 		t.Errorf("expected status 201, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var resp api.AddResponse
+	var resp apitypes.AddResponse
 	json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Memory == nil {
 		t.Error("expected memory in response")
@@ -154,7 +155,7 @@ func TestSearch(t *testing.T) {
 	_, r := setupTestServer()
 
 	// First add a memory
-	addBody := api.AddRequest{
+	addBody := apitypes.AddRequest{
 		Type:    "decision",
 		Area:    "auth",
 		Content: "Use JWT tokens",
@@ -166,7 +167,7 @@ func TestSearch(t *testing.T) {
 	r.ServeHTTP(rr, req)
 
 	// Now search
-	searchBody := api.SearchRequest{
+	searchBody := apitypes.SearchRequest{
 		Query: "authentication tokens",
 		Limit: 5,
 	}
@@ -181,7 +182,7 @@ func TestSearch(t *testing.T) {
 		t.Errorf("expected status 200, got %d", rr.Code)
 	}
 
-	var resp api.SearchResponse
+	var resp apitypes.SearchResponse
 	json.NewDecoder(rr.Body).Decode(&resp)
 	if len(resp.Memories) != 1 {
 		t.Errorf("expected 1 memory, got %d", len(resp.Memories))
@@ -193,7 +194,7 @@ func TestList(t *testing.T) {
 
 	// First add some memories
 	for i := 0; i < 3; i++ {
-		addBody := api.AddRequest{
+		addBody := apitypes.AddRequest{
 			Type:    "decision",
 			Area:    "auth",
 			Content: "Memory content",
@@ -214,7 +215,7 @@ func TestList(t *testing.T) {
 		t.Errorf("expected status 200, got %d", rr.Code)
 	}
 
-	var resp api.ListResponse
+	var resp apitypes.ListResponse
 	json.NewDecoder(rr.Body).Decode(&resp)
 	if len(resp.Memories) != 3 {
 		t.Errorf("expected 3 memories, got %d", len(resp.Memories))
@@ -254,7 +255,7 @@ func TestInvalidate(t *testing.T) {
 	_, r := setupTestServer()
 
 	// First add a memory
-	addBody := api.AddRequest{
+	addBody := apitypes.AddRequest{
 		Type:    "decision",
 		Area:    "auth",
 		Content: "Use JWT tokens",
@@ -265,7 +266,7 @@ func TestInvalidate(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 
-	var addResp api.AddResponse
+	var addResp apitypes.AddResponse
 	json.NewDecoder(rr.Body).Decode(&addResp)
 	memID := addResp.Memory.ID
 
@@ -278,14 +279,14 @@ func TestInvalidate(t *testing.T) {
 		t.Errorf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var invResp api.InvalidateResponse
+	var invResp apitypes.InvalidateResponse
 	json.NewDecoder(rr.Body).Decode(&invResp)
 	if invResp.Message == "" {
 		t.Error("expected message in response")
 	}
 
 	// Test with superseded_by
-	addBody2 := api.AddRequest{
+	addBody2 := apitypes.AddRequest{
 		Type:    "decision",
 		Area:    "auth",
 		Content: "Use OAuth2",
@@ -296,12 +297,12 @@ func TestInvalidate(t *testing.T) {
 	rr = httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 
-	var addResp2 api.AddResponse
+	var addResp2 apitypes.AddResponse
 	json.NewDecoder(rr.Body).Decode(&addResp2)
 	newMemID := addResp2.Memory.ID
 
 	// Add another memory to invalidate with superseded_by
-	addBody3 := api.AddRequest{
+	addBody3 := apitypes.AddRequest{
 		Type:    "decision",
 		Area:    "auth",
 		Content: "Third memory",
@@ -312,11 +313,11 @@ func TestInvalidate(t *testing.T) {
 	rr = httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 
-	var addResp3 api.AddResponse
+	var addResp3 apitypes.AddResponse
 	json.NewDecoder(rr.Body).Decode(&addResp3)
 	thirdMemID := addResp3.Memory.ID
 
-	invBody := api.InvalidateRequest{SupersededBy: &newMemID}
+	invBody := apitypes.InvalidateRequest{SupersededBy: &newMemID}
 	jsonBody, _ = json.Marshal(invBody)
 	req = httptest.NewRequest("PUT", fmt.Sprintf("/v1/memories/%d/invalidate", thirdMemID), bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")

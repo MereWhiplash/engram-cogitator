@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -64,7 +65,7 @@ func (s *SQLite) Close() error {
 	return s.conn.Close()
 }
 
-func (s *SQLite) Add(ctx context.Context, mem Memory, embedding []float32) (*Memory, error) {
+func (s *SQLite) Add(ctx context.Context, mem types.Memory, embedding []float32) (*types.Memory, error) {
 	tx, err := s.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -101,7 +102,7 @@ func (s *SQLite) Add(ctx context.Context, mem Memory, embedding []float32) (*Mem
 		return nil, err
 	}
 
-	return &Memory{
+	return &types.Memory{
 		ID:        id,
 		Type:      mem.Type,
 		Area:      mem.Area,
@@ -112,7 +113,7 @@ func (s *SQLite) Add(ctx context.Context, mem Memory, embedding []float32) (*Mem
 	}, nil
 }
 
-func (s *SQLite) Search(ctx context.Context, embedding []float32, opts SearchOpts) ([]Memory, error) {
+func (s *SQLite) Search(ctx context.Context, embedding []float32, opts types.SearchOpts) ([]types.Memory, error) {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 5
@@ -149,7 +150,7 @@ func (s *SQLite) Search(ctx context.Context, embedding []float32, opts SearchOpt
 	return s.queryMemories(ctx, query, args...)
 }
 
-func (s *SQLite) List(ctx context.Context, opts ListOpts) ([]Memory, error) {
+func (s *SQLite) List(ctx context.Context, opts types.ListOpts) ([]types.Memory, error) {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 10
@@ -209,16 +210,16 @@ func (s *SQLite) Invalidate(ctx context.Context, id int64, supersededBy *int64) 
 	return nil
 }
 
-func (s *SQLite) queryMemories(ctx context.Context, query string, args ...interface{}) ([]Memory, error) {
+func (s *SQLite) queryMemories(ctx context.Context, query string, args ...interface{}) ([]types.Memory, error) {
 	rows, err := s.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var memories []Memory
+	var memories []types.Memory
 	for rows.Next() {
-		var m Memory
+		var m types.Memory
 		var memType string
 		var supersededBy sql.NullInt64
 		var rationale sql.NullString
@@ -227,7 +228,7 @@ func (s *SQLite) queryMemories(ctx context.Context, query string, args ...interf
 			return nil, err
 		}
 
-		m.Type = MemoryType(memType)
+		m.Type = types.MemoryType(memType)
 		if rationale.Valid {
 			m.Rationale = rationale.String
 		}

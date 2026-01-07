@@ -13,6 +13,7 @@ import (
 	"github.com/MereWhiplash/engram-cogitator/internal/service"
 	"github.com/MereWhiplash/engram-cogitator/internal/storage"
 	"github.com/MereWhiplash/engram-cogitator/internal/tools"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -103,7 +104,7 @@ func runList(ctx context.Context, cfg storage.Config, limit int) error {
 	}
 	defer store.Close()
 
-	memories, err := store.List(ctx, storage.ListOpts{Limit: limit})
+	memories, err := store.List(ctx, types.ListOpts{Limit: limit})
 	if err != nil {
 		return fmt.Errorf("failed to list memories: %w", err)
 	}

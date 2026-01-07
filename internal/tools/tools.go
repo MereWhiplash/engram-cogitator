@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/MereWhiplash/engram-cogitator/internal/service"
-	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -25,7 +25,7 @@ type AddInput struct {
 
 // AddOutput defines the output schema for ec_add
 type AddOutput struct {
-	Memory *storage.Memory `json:"memory"`
+	Memory *types.Memory `json:"memory"`
 }
 
 // SearchInput defines the input schema for ec_search
@@ -38,7 +38,7 @@ type SearchInput struct {
 
 // SearchOutput defines the output schema for ec_search
 type SearchOutput struct {
-	Memories []storage.Memory `json:"memories"`
+	Memories []types.Memory `json:"memories"`
 }
 
 // InvalidateInput defines the input schema for ec_invalidate
@@ -62,7 +62,7 @@ type ListInput struct {
 
 // ListOutput defines the output schema for ec_list
 type ListOutput struct {
-	Memories []storage.Memory `json:"memories"`
+	Memories []types.Memory `json:"memories"`
 }
 
 func textResult(text string) *mcp.CallToolResult {
@@ -108,7 +108,7 @@ func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input AddIn
 		return errorResult("type, area, and content are required"), AddOutput{}, nil
 	}
 
-	memory, err := h.svc.Add(ctx, storage.MemoryType(input.Type), input.Area, input.Content, input.Rationale)
+	memory, err := h.svc.Add(ctx, types.MemoryType(input.Type), input.Area, input.Content, input.Rationale)
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to store memory: %v", err)), AddOutput{}, nil
 	}
@@ -127,13 +127,13 @@ func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input Se
 		limit = 5
 	}
 
-	memories, err := h.svc.Search(ctx, input.Query, limit, storage.MemoryType(input.Type), input.Area)
+	memories, err := h.svc.Search(ctx, input.Query, limit, types.MemoryType(input.Type), input.Area)
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to search: %v", err)), SearchOutput{}, nil
 	}
 
 	if len(memories) == 0 {
-		return textResult("No matching memories found."), SearchOutput{Memories: []storage.Memory{}}, nil
+		return textResult("No matching memories found."), SearchOutput{Memories: []types.Memory{}}, nil
 	}
 
 	result, _ := json.MarshalIndent(memories, "", "  ")
@@ -168,13 +168,13 @@ func (h *Handler) List(ctx context.Context, req *mcp.CallToolRequest, input List
 		limit = 10
 	}
 
-	memories, err := h.svc.List(ctx, limit, storage.MemoryType(input.Type), input.Area, input.IncludeInvalid)
+	memories, err := h.svc.List(ctx, limit, types.MemoryType(input.Type), input.Area, input.IncludeInvalid)
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to list: %v", err)), ListOutput{}, nil
 	}
 
 	if len(memories) == 0 {
-		return textResult("No memories found."), ListOutput{Memories: []storage.Memory{}}, nil
+		return textResult("No memories found."), ListOutput{Memories: []types.Memory{}}, nil
 	}
 
 	result, _ := json.MarshalIndent(memories, "", "  ")

@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -111,7 +112,7 @@ func (m *MongoDB) Close() error {
 	return m.client.Disconnect(ctx)
 }
 
-func (m *MongoDB) Add(ctx context.Context, mem Memory, embedding []float32) (*Memory, error) {
+func (m *MongoDB) Add(ctx context.Context, mem types.Memory, embedding []float32) (*types.Memory, error) {
 	id, err := m.nextID(ctx)
 	if err != nil {
 		return nil, err
@@ -137,7 +138,7 @@ func (m *MongoDB) Add(ctx context.Context, mem Memory, embedding []float32) (*Me
 		return nil, fmt.Errorf("failed to insert memory: %w", err)
 	}
 
-	return &Memory{
+	return &types.Memory{
 		ID:          id,
 		Type:        mem.Type,
 		Area:        mem.Area,
@@ -151,7 +152,7 @@ func (m *MongoDB) Add(ctx context.Context, mem Memory, embedding []float32) (*Me
 	}, nil
 }
 
-func (m *MongoDB) Search(ctx context.Context, embedding []float32, opts SearchOpts) ([]Memory, error) {
+func (m *MongoDB) Search(ctx context.Context, embedding []float32, opts types.SearchOpts) ([]types.Memory, error) {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 5
@@ -194,8 +195,8 @@ func (m *MongoDB) Search(ctx context.Context, embedding []float32, opts SearchOp
 	return m.cursorToMemories(ctx, cursor)
 }
 
-func (m *MongoDB) listFallback(ctx context.Context, opts SearchOpts) ([]Memory, error) {
-	listOpts := ListOpts{
+func (m *MongoDB) listFallback(ctx context.Context, opts types.SearchOpts) ([]types.Memory, error) {
+	listOpts := types.ListOpts{
 		Limit: opts.Limit,
 		Type:  opts.Type,
 		Area:  opts.Area,
@@ -204,7 +205,7 @@ func (m *MongoDB) listFallback(ctx context.Context, opts SearchOpts) ([]Memory, 
 	return m.List(ctx, listOpts)
 }
 
-func (m *MongoDB) List(ctx context.Context, opts ListOpts) ([]Memory, error) {
+func (m *MongoDB) List(ctx context.Context, opts types.ListOpts) ([]types.Memory, error) {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 10
@@ -258,17 +259,17 @@ func (m *MongoDB) Invalidate(ctx context.Context, id int64, supersededBy *int64)
 	return nil
 }
 
-func (m *MongoDB) cursorToMemories(ctx context.Context, cursor *mongo.Cursor) ([]Memory, error) {
-	var memories []Memory
+func (m *MongoDB) cursorToMemories(ctx context.Context, cursor *mongo.Cursor) ([]types.Memory, error) {
+	var memories []types.Memory
 	for cursor.Next(ctx) {
 		var doc memoryDoc
 		if err := cursor.Decode(&doc); err != nil {
 			return nil, err
 		}
 
-		memories = append(memories, Memory{
+		memories = append(memories, types.Memory{
 			ID:           doc.ID,
-			Type:         MemoryType(doc.Type),
+			Type:         types.MemoryType(doc.Type),
 			Area:         doc.Area,
 			Content:      doc.Content,
 			Rationale:    doc.Rationale,

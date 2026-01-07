@@ -13,12 +13,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/MereWhiplash/engram-cogitator/internal/api"
 	"github.com/MereWhiplash/engram-cogitator/internal/embedder"
 	"github.com/MereWhiplash/engram-cogitator/internal/service"
 	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
@@ -86,7 +87,7 @@ func main() {
 	// Set health check to verify storage connectivity
 	handlers.SetHealthCheck(func() error {
 		// Simple connectivity check - list with limit 1
-		_, err := store.List(context.Background(), storage.ListOpts{Limit: 1})
+		_, err := store.List(context.Background(), types.ListOpts{Limit: 1})
 		return err
 	})
 
