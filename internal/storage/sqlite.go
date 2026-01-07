@@ -1,6 +1,7 @@
-package db
+package storage
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -10,25 +11,13 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// Memory represents a stored memory entry
-type Memory struct {
-	ID           int64     `json:"id"`
-	Type         string    `json:"type"`
-	Area         string    `json:"area"`
-	Content      string    `json:"content"`
-	Rationale    string    `json:"rationale,omitempty"`
-	IsValid      bool      `json:"is_valid"`
-	SupersededBy *int64    `json:"superseded_by,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-}
-
-// DB wraps the SQLite database with vector search capabilities
-type DB struct {
+// SQLite implements Storage using SQLite with sqlite-vec
+type SQLite struct {
 	conn *sql.DB
 }
 
-// New creates a new database connection and initializes the schema
-func New(path string) (*DB, error) {
+// NewSQLite creates a new SQLite storage
+func NewSQLite(path string) (*SQLite, error) {
 	sqlite_vec.Auto()
 
 	conn, err := sql.Open("sqlite3", path)
@@ -36,22 +25,16 @@ func New(path string) (*DB, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	db := &DB{conn: conn}
-	if err := db.initSchema(); err != nil {
+	s := &SQLite{conn: conn}
+	if err := s.initSchema(); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
-	return db, nil
+	return s, nil
 }
 
-// Close closes the database connection
-func (d *DB) Close() error {
-	return d.conn.Close()
-}
-
-// initSchema creates the necessary tables if they don't exist
-func (d *DB) initSchema() error {
+func (s *SQLite) initSchema() error {
 	schema := `
 		CREATE TABLE IF NOT EXISTS memories (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,23 +56,24 @@ func (d *DB) initSchema() error {
 			embedding FLOAT[768]
 		);
 	`
-
-	_, err := d.conn.Exec(schema)
+	_, err := s.conn.Exec(schema)
 	return err
 }
 
-// Add inserts a new memory entry with its embedding
-func (d *DB) Add(memType, area, content, rationale string, embedding []float32) (*Memory, error) {
-	tx, err := d.conn.Begin()
+func (s *SQLite) Close() error {
+	return s.conn.Close()
+}
+
+func (s *SQLite) Add(ctx context.Context, mem Memory, embedding []float32) (*Memory, error) {
+	tx, err := s.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
-	// Insert memory
-	result, err := tx.Exec(
+	result, err := tx.ExecContext(ctx,
 		`INSERT INTO memories (type, area, content, rationale) VALUES (?, ?, ?, ?)`,
-		memType, area, content, rationale,
+		mem.Type, mem.Area, mem.Content, mem.Rationale,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert memory: %w", err)
@@ -100,13 +84,12 @@ func (d *DB) Add(memType, area, content, rationale string, embedding []float32) 
 		return nil, err
 	}
 
-	// Insert embedding
 	embeddingJSON, err := json.Marshal(embedding)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal embedding: %w", err)
 	}
 
-	_, err = tx.Exec(
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)`,
 		id, string(embeddingJSON),
 	)
@@ -120,17 +103,17 @@ func (d *DB) Add(memType, area, content, rationale string, embedding []float32) 
 
 	return &Memory{
 		ID:        id,
-		Type:      memType,
-		Area:      area,
-		Content:   content,
-		Rationale: rationale,
+		Type:      mem.Type,
+		Area:      mem.Area,
+		Content:   mem.Content,
+		Rationale: mem.Rationale,
 		IsValid:   true,
 		CreatedAt: time.Now(),
 	}, nil
 }
 
-// Search finds memories by semantic similarity
-func (d *DB) Search(embedding []float32, limit int, memType, area string) ([]Memory, error) {
+func (s *SQLite) Search(ctx context.Context, embedding []float32, opts SearchOpts) ([]Memory, error) {
+	limit := opts.Limit
 	if limit <= 0 {
 		limit = 5
 	}
@@ -148,13 +131,13 @@ func (d *DB) Search(embedding []float32, limit int, memType, area string) ([]Mem
 	`
 	args := []interface{}{}
 
-	if memType != "" {
+	if opts.Type != "" {
 		query += " AND m.type = ?"
-		args = append(args, memType)
+		args = append(args, opts.Type)
 	}
-	if area != "" {
+	if opts.Area != "" {
 		query += " AND m.area = ?"
-		args = append(args, area)
+		args = append(args, opts.Area)
 	}
 
 	query += `
@@ -163,37 +146,11 @@ func (d *DB) Search(embedding []float32, limit int, memType, area string) ([]Mem
 	`
 	args = append(args, string(embeddingJSON), limit)
 
-	rows, err := d.conn.Query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search: %w", err)
-	}
-	defer rows.Close()
-
-	var memories []Memory
-	for rows.Next() {
-		var m Memory
-		var supersededBy sql.NullInt64
-		var rationale sql.NullString
-
-		if err := rows.Scan(&m.ID, &m.Type, &m.Area, &m.Content, &rationale, &m.IsValid, &supersededBy, &m.CreatedAt); err != nil {
-			return nil, err
-		}
-
-		if rationale.Valid {
-			m.Rationale = rationale.String
-		}
-		if supersededBy.Valid {
-			m.SupersededBy = &supersededBy.Int64
-		}
-
-		memories = append(memories, m)
-	}
-
-	return memories, rows.Err()
+	return s.queryMemories(ctx, query, args...)
 }
 
-// List returns recent memories with optional filtering
-func (d *DB) List(limit int, memType, area string, includeInvalid bool) ([]Memory, error) {
+func (s *SQLite) List(ctx context.Context, opts ListOpts) ([]Memory, error) {
+	limit := opts.Limit
 	if limit <= 0 {
 		limit = 10
 	}
@@ -205,52 +162,25 @@ func (d *DB) List(limit int, memType, area string, includeInvalid bool) ([]Memor
 	`
 	args := []interface{}{}
 
-	if !includeInvalid {
+	if !opts.IncludeInvalid {
 		query += " AND is_valid = TRUE"
 	}
-	if memType != "" {
+	if opts.Type != "" {
 		query += " AND type = ?"
-		args = append(args, memType)
+		args = append(args, opts.Type)
 	}
-	if area != "" {
+	if opts.Area != "" {
 		query += " AND area = ?"
-		args = append(args, area)
+		args = append(args, opts.Area)
 	}
 
 	query += " ORDER BY created_at DESC LIMIT ?"
 	args = append(args, limit)
 
-	rows, err := d.conn.Query(query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var memories []Memory
-	for rows.Next() {
-		var m Memory
-		var supersededBy sql.NullInt64
-		var rationale sql.NullString
-
-		if err := rows.Scan(&m.ID, &m.Type, &m.Area, &m.Content, &rationale, &m.IsValid, &supersededBy, &m.CreatedAt); err != nil {
-			return nil, err
-		}
-
-		if rationale.Valid {
-			m.Rationale = rationale.String
-		}
-		if supersededBy.Valid {
-			m.SupersededBy = &supersededBy.Int64
-		}
-
-		memories = append(memories, m)
-	}
-
-	return memories, rows.Err()
+	return s.queryMemories(ctx, query, args...)
 }
 
-// Invalidate marks a memory as invalid
-func (d *DB) Invalidate(id int64, supersededBy *int64) error {
+func (s *SQLite) Invalidate(ctx context.Context, id int64, supersededBy *int64) error {
 	query := `UPDATE memories SET is_valid = FALSE`
 	args := []interface{}{}
 
@@ -262,7 +192,7 @@ func (d *DB) Invalidate(id int64, supersededBy *int64) error {
 	query += " WHERE id = ?"
 	args = append(args, id)
 
-	result, err := d.conn.Exec(query, args...)
+	result, err := s.conn.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -277,4 +207,36 @@ func (d *DB) Invalidate(id int64, supersededBy *int64) error {
 	}
 
 	return nil
+}
+
+func (s *SQLite) queryMemories(ctx context.Context, query string, args ...interface{}) ([]Memory, error) {
+	rows, err := s.conn.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var memories []Memory
+	for rows.Next() {
+		var m Memory
+		var memType string
+		var supersededBy sql.NullInt64
+		var rationale sql.NullString
+
+		if err := rows.Scan(&m.ID, &memType, &m.Area, &m.Content, &rationale, &m.IsValid, &supersededBy, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+
+		m.Type = MemoryType(memType)
+		if rationale.Valid {
+			m.Rationale = rationale.String
+		}
+		if supersededBy.Valid {
+			m.SupersededBy = &supersededBy.Int64
+		}
+
+		memories = append(memories, m)
+	}
+
+	return memories, rows.Err()
 }

@@ -1,5 +1,7 @@
 # Binaries
 engram-cogitator
+ec-tui
+tui
 *.exe
 
 # Test database
@@ -18,3 +20,4 @@ engram-cogitator
 
 # Local MCP config
 .mcp.json
+docs/plans/
