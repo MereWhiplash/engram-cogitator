@@ -1,0 +1,17 @@
+# charts/engram-cogitator/Chart.yaml
+apiVersion: v2
+name: engram-cogitator
+description: Persistent semantic memory for Claude Code teams
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - claude
+  - mcp
+  - memory
+  - ai
+maintainers:
+  - name: MereWhiplash
+    url: https://github.com/MereWhiplash
+sources:
+  - https://github.com/MereWhiplash/engram-cogitator

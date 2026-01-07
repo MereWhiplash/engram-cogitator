@@ -1,0 +1,114 @@
+# charts/engram-cogitator/values.yaml
+
+# Image configuration
+image:
+  repository: ghcr.io/merewhiplash/engram-cogitator
+  tag: ""  # Defaults to appVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# API server configuration
+api:
+  replicas: 2
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Storage configuration
+storage:
+  # Driver: "postgres" or "mongodb"
+  driver: postgres
+
+  postgres:
+    # Use internal StatefulSet or external
+    internal: true
+    # External connection (used if internal: false)
+    host: ""
+    port: 5432
+    database: engram
+    username: engram
+    # Password from secret
+    existingSecret: ""
+    existingSecretKey: password
+    # If no existingSecret, create one with this password
+    password: ""
+    # Internal StatefulSet settings
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 250m
+      limits:
+        memory: 1Gi
+        cpu: 500m
+    persistence:
+      size: 10Gi
+      storageClass: ""
+
+  mongodb:
+    # User provides URI (Atlas or self-hosted)
+    uri: ""
+    database: engram
+    # URI from secret
+    existingSecret: ""
+    existingSecretKey: uri
+
+# Ollama configuration
+ollama:
+  enabled: true
+  model: nomic-embed-text
+  resources:
+    requests:
+      memory: 2Gi
+      cpu: 1
+    limits:
+      memory: 4Gi
+      cpu: 2
+  persistence:
+    size: 10Gi
+    storageClass: ""
+  nodeSelector: {}
+  tolerations: []
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: engram.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Network policies
+networkPolicy:
+  enabled: true
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Horizontal pod autoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""

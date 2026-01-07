@@ -1,0 +1,5 @@
+# charts/engram-cogitator/.helmignore
+.git
+.gitignore
+*.md
+.helmignore
