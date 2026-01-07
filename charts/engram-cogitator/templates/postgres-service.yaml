@@ -1,0 +1,20 @@
+# charts/engram-cogitator/templates/postgres-service.yaml
+{{- if and (eq .Values.storage.driver "postgres") .Values.storage.postgres.internal }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "engram-cogitator.postgres.name" . }}
+  labels:
+    {{- include "engram-cogitator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: postgres
+      protocol: TCP
+      name: postgres
+  selector:
+    {{- include "engram-cogitator.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+{{- end }}
