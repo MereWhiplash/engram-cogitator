@@ -1,11 +1,13 @@
 #!/bin/bash
 # install-team.sh - Install Engram Cogitator shim for team mode
+# Works with any MCP-compatible client (Claude Code, Cursor, Cline, Windsurf, etc.)
 set -e
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 echo -e "${GREEN}Installing Engram Cogitator (Team Mode)${NC}"
@@ -37,11 +39,20 @@ echo "Detected: $OS/$ARCH"
 
 # Download shim
 VERSION=$(curl -s https://api.github.com/repos/MereWhiplash/engram-cogitator/releases/latest | grep tag_name | cut -d '"' -f 4)
+if [ -z "$VERSION" ]; then
+    echo -e "${RED}Error: Could not determine latest version${NC}"
+    exit 1
+fi
+
 DOWNLOAD_URL="https://github.com/MereWhiplash/engram-cogitator/releases/download/${VERSION}/ec-shim_${VERSION#v}_${OS}_${ARCH}.tar.gz"
 
 echo "Downloading ec-shim ${VERSION}..."
 TEMP_DIR=$(mktemp -d)
-curl -sSL "$DOWNLOAD_URL" | tar -xz -C "$TEMP_DIR"
+if ! curl -sSL "$DOWNLOAD_URL" | tar -xz -C "$TEMP_DIR"; then
+    echo -e "${RED}Error: Failed to download ec-shim${NC}"
+    rm -rf "$TEMP_DIR"
+    exit 1
+fi
 
 # Install binary
 INSTALL_DIR="${HOME}/.local/bin"
@@ -50,7 +61,8 @@ mv "$TEMP_DIR/ec-shim" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/ec-shim"
 rm -rf "$TEMP_DIR"
 
-echo -e "${GREEN}Installed ec-shim to $INSTALL_DIR/ec-shim${NC}"
+SHIM_PATH="$INSTALL_DIR/ec-shim"
+echo -e "${GREEN}Installed ec-shim to $SHIM_PATH${NC}"
 
 # Check if in PATH
 if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
@@ -59,31 +71,65 @@ if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
     echo "  export PATH=\"\$PATH:$INSTALL_DIR\""
 fi
 
-# Configure Claude Code MCP
 echo ""
-echo "Configuring Claude Code..."
 
-# Check for claude CLI
-if ! command -v claude &> /dev/null; then
-    echo -e "${RED}Error: claude CLI not found. Please install Claude Code first.${NC}"
-    exit 1
+# ============================================================
+# MCP Configuration
+# ============================================================
+
+echo -e "${CYAN}=== MCP Configuration ===${NC}"
+echo ""
+
+# Check for Claude Code CLI
+if command -v claude &> /dev/null; then
+    echo "Claude Code CLI detected."
+    read -p "Configure Claude Code automatically? [Y/n] " -n 1 -r
+    echo ""
+
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        echo "Configuring Claude Code..."
+        claude mcp remove engram-cogitator 2>/dev/null || true
+        claude mcp add engram-cogitator \
+            --scope user \
+            -- "$SHIM_PATH" --api-url "$EC_API_URL"
+        echo -e "${GREEN}Claude Code configured!${NC}"
+    fi
+    echo ""
 fi
 
-# Remove existing if present
-claude mcp remove engram-cogitator 2>/dev/null || true
-
-# Add new config
-claude mcp add engram-cogitator \
-    --scope user \
-    -- "$INSTALL_DIR/ec-shim" --api-url "$EC_API_URL"
+# Always output generic MCP config
+echo -e "${CYAN}For other MCP clients (Cursor, Cline, Windsurf, etc.):${NC}"
+echo ""
+echo "Add this to your MCP configuration file:"
+echo ""
+cat << EOF
+{
+  "mcpServers": {
+    "engram-cogitator": {
+      "command": "$SHIM_PATH",
+      "args": ["--api-url", "$EC_API_URL"]
+    }
+  }
+}
+EOF
 
 echo ""
+echo -e "${YELLOW}Common config file locations:${NC}"
+echo "  Cursor:   ~/.cursor/mcp.json"
+echo "  Cline:    VS Code settings > Extensions > Cline > MCP Servers"
+echo "  Windsurf: ~/.codeium/windsurf/mcp_config.json"
+echo ""
+
+# ============================================================
+# Done
+# ============================================================
+
 echo -e "${GREEN}Installation complete!${NC}"
 echo ""
-echo "Restart Claude Code to activate Engram Cogitator."
+echo "Restart your AI coding assistant to activate Engram Cogitator."
 echo ""
-echo "The following MCP tools are now available:"
-echo "  - ec_add      : Add memories (decisions, learnings, patterns)"
-echo "  - ec_search   : Search team memories semantically"
-echo "  - ec_list     : List recent memories"
+echo "Available MCP tools:"
+echo "  - ec_add        : Add memories (decisions, learnings, patterns)"
+echo "  - ec_search     : Search team memories semantically"
+echo "  - ec_list       : List recent memories"
 echo "  - ec_invalidate : Mark memories as outdated"
