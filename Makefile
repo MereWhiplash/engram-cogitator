@@ -1,4 +1,4 @@
-.PHONY: build test lint docker kind-up kind-down helm-install helm-uninstall helm-template port-forward
+.PHONY: build test lint docker kind-up kind-down helm-deps helm-install helm-uninstall helm-template port-forward
 
 # Go build
 build:
@@ -25,6 +25,9 @@ kind-down:
 	kind delete cluster --name engram
 
 # Helm
+helm-deps:
+	helm dependency build charts/engram-cogitator
+
 helm-install:
 	helm install engram charts/engram-cogitator \
 		--set storage.postgres.password=devpassword \

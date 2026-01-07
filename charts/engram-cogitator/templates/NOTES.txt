@@ -3,7 +3,7 @@ Engram Cogitator has been deployed!
 {{- if eq .Values.storage.driver "postgres" }}
 Storage: PostgreSQL
 {{- if .Values.storage.postgres.internal }}
-  Internal Bitnami PostgreSQL is running.
+  Internal PostgreSQL (pgvector/pgvector:pg16) is running.
 {{- else }}
   Using external PostgreSQL at {{ .Values.storage.postgres.host }}:{{ .Values.storage.postgres.port }}
 {{- end }}

@@ -34,17 +34,9 @@ spec:
             - -c
             - |
               ollama serve &
-              PID=$!
-              # Wait for server to be ready
-              until curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; do
-                echo "Waiting for Ollama server..."
-                sleep 2
-              done
-              echo "Pulling model {{ .Values.ollama.model }}..."
+              sleep 5
               ollama pull {{ .Values.ollama.model }}
-              echo "Model pulled successfully"
-              kill $PID 2>/dev/null || true
-              wait $PID 2>/dev/null || true
+              pkill ollama || true
           volumeMounts:
             - name: ollama-data
               mountPath: /root/.ollama

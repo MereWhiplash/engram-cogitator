@@ -30,35 +30,19 @@ storage:
   driver: postgres
 
   postgres:
-    # Use internal Bitnami PostgreSQL or external
+    # Use internal StatefulSet or external
     internal: true
     # External connection (used if internal: false)
     host: ""
     port: 5432
     database: engram
     username: engram
-    # For external: password from existing secret
+    # Password - set at install: --set storage.postgres.password=xxx
+    password: ""
+    # Or use existing secret
     existingSecret: ""
     existingSecretKey: password
-
-  mongodb:
-    # MongoDB Atlas or self-hosted URI
-    database: engram
-    # URI from secret (required when driver: mongodb)
-    existingSecret: ""
-    existingSecretKey: uri
-
-# Bitnami PostgreSQL subchart configuration
-# Only used when storage.driver=postgres AND storage.postgres.internal=true
-postgresql:
-  enabled: false  # Controlled by condition in Chart.yaml
-  auth:
-    username: engram
-    database: engram
-    # Set password at install time: --set postgresql.auth.password=xxx
-  primary:
-    persistence:
-      size: 10Gi
+    # Internal postgres settings
     resources:
       requests:
         memory: 512Mi
@@ -66,8 +50,16 @@ postgresql:
       limits:
         memory: 1Gi
         cpu: 500m
-  image:
-    tag: "16"  # Use PostgreSQL 16 for pgvector compatibility
+    persistence:
+      size: 10Gi
+      storageClass: ""
+
+  mongodb:
+    # MongoDB Atlas or self-hosted URI
+    database: engram
+    # URI from secret (required when driver: mongodb)
+    existingSecret: ""
+    existingSecretKey: uri
 
 # Ollama configuration
 ollama:

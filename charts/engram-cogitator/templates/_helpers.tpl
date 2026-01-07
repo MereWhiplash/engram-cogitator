@@ -74,14 +74,10 @@ Ollama component name
 {{- end }}
 
 {{/*
-Postgres service name - uses Bitnami naming when internal
+Postgres component name
 */}}
 {{- define "engram-cogitator.postgres.name" -}}
-{{- if .Values.storage.postgres.internal }}
-{{- printf "%s-postgresql" .Release.Name }}
-{{- else }}
-{{- .Values.storage.postgres.host }}
-{{- end }}
+{{- printf "%s-postgres" (include "engram-cogitator.fullname" .) }}
 {{- end }}
 
 {{/*
@@ -89,7 +85,7 @@ Postgres DSN
 */}}
 {{- define "engram-cogitator.postgres.dsn" -}}
 {{- if .Values.storage.postgres.internal }}
-{{- printf "postgres://%s:$(POSTGRES_PASSWORD)@%s:5432/%s?sslmode=disable" .Values.postgresql.auth.username (include "engram-cogitator.postgres.name" .) .Values.postgresql.auth.database }}
+{{- printf "postgres://%s:$(POSTGRES_PASSWORD)@%s:5432/%s?sslmode=disable" .Values.storage.postgres.username (include "engram-cogitator.postgres.name" .) .Values.storage.postgres.database }}
 {{- else }}
 {{- printf "postgres://%s:$(POSTGRES_PASSWORD)@%s:%d/%s?sslmode=disable" .Values.storage.postgres.username .Values.storage.postgres.host (.Values.storage.postgres.port | int) .Values.storage.postgres.database }}
 {{- end }}
@@ -99,10 +95,10 @@ Postgres DSN
 Postgres secret name
 */}}
 {{- define "engram-cogitator.postgres.secretName" -}}
-{{- if .Values.storage.postgres.internal }}
-{{- printf "%s-postgresql" .Release.Name }}
+{{- if .Values.storage.postgres.existingSecret }}
+{{- .Values.storage.postgres.existingSecret }}
 {{- else }}
-{{- required "storage.postgres.existingSecret is required when using external postgres" .Values.storage.postgres.existingSecret }}
+{{- printf "%s-postgres" (include "engram-cogitator.fullname" .) }}
 {{- end }}
 {{- end }}
 
