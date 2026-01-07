@@ -9,9 +9,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/MereWhiplash/engram-cogitator/internal/apitypes"
 	"github.com/MereWhiplash/engram-cogitator/internal/service"
-	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
+	"github.com/go-chi/chi/v5"
 )
 
 // Handlers holds HTTP handler dependencies
@@ -39,7 +40,7 @@ func (h *Handlers) respondJSON(w http.ResponseWriter, status int, data interface
 }
 
 func (h *Handlers) respondError(w http.ResponseWriter, status int, msg string) {
-	h.respondJSON(w, status, ErrorResponse{Error: msg})
+	h.respondJSON(w, status, apitypes.ErrorResponse{Error: msg})
 }
 
 // logError logs an error with request context
@@ -53,16 +54,16 @@ func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 	if h.healthCheck != nil {
 		if err := h.healthCheck(); err != nil {
 			h.logError(r, "health", err)
-			h.respondJSON(w, http.StatusServiceUnavailable, HealthResponse{Status: "unhealthy"})
+			h.respondJSON(w, http.StatusServiceUnavailable, apitypes.HealthResponse{Status: "unhealthy"})
 			return
 		}
 	}
-	h.respondJSON(w, http.StatusOK, HealthResponse{Status: "ok"})
+	h.respondJSON(w, http.StatusOK, apitypes.HealthResponse{Status: "ok"})
 }
 
 // Add handles POST /v1/memories
 func (h *Handlers) Add(w http.ResponseWriter, r *http.Request) {
-	var req AddRequest
+	var req apitypes.AddRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -91,12 +92,12 @@ func (h *Handlers) Add(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.respondJSON(w, http.StatusCreated, AddResponse{Memory: mem})
+	h.respondJSON(w, http.StatusCreated, apitypes.AddResponse{Memory: mem})
 }
 
 // Search handles POST /v1/memories/search
 func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
-	var req SearchRequest
+	var req apitypes.SearchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -121,7 +122,7 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.respondJSON(w, http.StatusOK, SearchResponse{Memories: memories})
+	h.respondJSON(w, http.StatusOK, apitypes.SearchResponse{Memories: memories})
 }
 
 // List handles GET /v1/memories
@@ -160,9 +161,9 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 		memories = memories[:limit]
 	}
 
-	h.respondJSON(w, http.StatusOK, ListResponse{
+	h.respondJSON(w, http.StatusOK, apitypes.ListResponse{
 		Memories: memories,
-		Pagination: &PaginationInfo{
+		Pagination: &apitypes.PaginationInfo{
 			Limit:   limit,
 			Offset:  offset,
 			HasMore: hasMore,
@@ -179,7 +180,7 @@ func (h *Handlers) Invalidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req InvalidateRequest
+	var req apitypes.InvalidateRequest
 	if r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			h.respondError(w, http.StatusBadRequest, "invalid request body")
@@ -190,7 +191,7 @@ func (h *Handlers) Invalidate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if err := h.svc.Invalidate(ctx, id, req.SupersededBy); err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if errors.Is(err, types.ErrNotFound) {
 			h.respondError(w, http.StatusNotFound, "memory not found")
 			return
 		}
@@ -204,5 +205,5 @@ func (h *Handlers) Invalidate(w http.ResponseWriter, r *http.Request) {
 		msg += fmt.Sprintf(" Superseded by memory %d.", *req.SupersededBy)
 	}
 
-	h.respondJSON(w, http.StatusOK, InvalidateResponse{Message: msg})
+	h.respondJSON(w, http.StatusOK, apitypes.InvalidateResponse{Message: msg})
 }

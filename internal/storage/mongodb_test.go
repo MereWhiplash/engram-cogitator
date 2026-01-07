@@ -5,11 +5,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/MereWhiplash/engram-cogitator/internal/storage"
 )
 
 // cleanupMongoDB removes all test data before each test
@@ -47,8 +47,8 @@ func TestMongoDBStorage_Add(t *testing.T) {
 	}
 	defer store.Close()
 
-	mem := storage.Memory{
-		Type:        storage.TypeDecision,
+	mem := types.Memory{
+		Type:        types.TypeDecision,
 		Area:        "auth",
 		Content:     "Use JWT tokens",
 		Rationale:   "Stateless auth",
@@ -86,8 +86,8 @@ func TestMongoDBStorage_Search(t *testing.T) {
 	}
 	defer store.Close()
 
-	mem := storage.Memory{
-		Type:        storage.TypeLearning,
+	mem := types.Memory{
+		Type:        types.TypeLearning,
 		Area:        "api",
 		Content:     "Rate limiting patterns",
 		AuthorName:  "Test User",
@@ -102,7 +102,7 @@ func TestMongoDBStorage_Search(t *testing.T) {
 		t.Fatalf("Add failed: %v", err)
 	}
 
-	results, err := store.Search(ctx, embedding, storage.SearchOpts{Limit: 5})
+	results, err := store.Search(ctx, embedding, types.SearchOpts{Limit: 5})
 	if err != nil {
 		t.Fatalf("Search failed: %v", err)
 	}
@@ -126,8 +126,8 @@ func TestMongoDBStorage_List(t *testing.T) {
 	}
 	defer store.Close()
 
-	mem := storage.Memory{
-		Type:        storage.TypePattern,
+	mem := types.Memory{
+		Type:        types.TypePattern,
 		Area:        "testing",
 		Content:     "Always use table-driven tests",
 		AuthorName:  "Test User",
@@ -141,7 +141,7 @@ func TestMongoDBStorage_List(t *testing.T) {
 		t.Fatalf("Add failed: %v", err)
 	}
 
-	results, err := store.List(ctx, storage.ListOpts{Limit: 10})
+	results, err := store.List(ctx, types.ListOpts{Limit: 10})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}

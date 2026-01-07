@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // cleanupPostgres removes all test data before each test
@@ -44,8 +44,8 @@ func TestPostgresStorage_Add(t *testing.T) {
 	}
 	defer store.Close()
 
-	mem := storage.Memory{
-		Type:        storage.TypeDecision,
+	mem := types.Memory{
+		Type:        types.TypeDecision,
 		Area:        "auth",
 		Content:     "Use JWT tokens",
 		Rationale:   "Stateless auth",
@@ -84,8 +84,8 @@ func TestPostgresStorage_Search(t *testing.T) {
 	defer store.Close()
 
 	// Add a memory
-	mem := storage.Memory{
-		Type:        storage.TypeDecision,
+	mem := types.Memory{
+		Type:        types.TypeDecision,
 		Area:        "auth",
 		Content:     "Use JWT tokens",
 		AuthorName:  "Test User",
@@ -101,7 +101,7 @@ func TestPostgresStorage_Search(t *testing.T) {
 	}
 
 	// Search - should find it
-	results, err := store.Search(ctx, embedding, storage.SearchOpts{Limit: 5})
+	results, err := store.Search(ctx, embedding, types.SearchOpts{Limit: 5})
 	if err != nil {
 		t.Fatalf("Search failed: %v", err)
 	}
@@ -128,16 +128,16 @@ func TestPostgresStorage_SearchByRepo(t *testing.T) {
 	embedding := make([]float32, 768)
 
 	// Add memories to different repos
-	mem1 := storage.Memory{
-		Type:        storage.TypeDecision,
+	mem1 := types.Memory{
+		Type:        types.TypeDecision,
 		Area:        "auth",
 		Content:     "Repo A decision",
 		AuthorName:  "User A",
 		AuthorEmail: "a@example.com",
 		Repo:        "org/repo-a",
 	}
-	mem2 := storage.Memory{
-		Type:        storage.TypeDecision,
+	mem2 := types.Memory{
+		Type:        types.TypeDecision,
 		Area:        "auth",
 		Content:     "Repo B decision",
 		AuthorName:  "User B",
@@ -149,7 +149,7 @@ func TestPostgresStorage_SearchByRepo(t *testing.T) {
 	_, _ = store.Add(ctx, mem2, embedding)
 
 	// Search scoped to repo-a
-	results, err := store.Search(ctx, embedding, storage.SearchOpts{
+	results, err := store.Search(ctx, embedding, types.SearchOpts{
 		Limit: 10,
 		Repo:  "org/repo-a",
 	})

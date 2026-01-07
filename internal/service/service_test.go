@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/MereWhiplash/engram-cogitator/internal/service"
-	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 )
 
 // mockEmbedder implements embedder.Embedder for testing
@@ -21,11 +21,11 @@ func (m *mockEmbedder) EmbedForSearch(query string) ([]float32, error) {
 
 // mockStorage implements storage.Storage for testing
 type mockStorage struct {
-	memories []storage.Memory
+	memories []types.Memory
 	nextID   int64
 }
 
-func (m *mockStorage) Add(ctx context.Context, mem storage.Memory, embedding []float32) (*storage.Memory, error) {
+func (m *mockStorage) Add(ctx context.Context, mem types.Memory, embedding []float32) (*types.Memory, error) {
 	m.nextID++
 	mem.ID = m.nextID
 	mem.IsValid = true
@@ -33,11 +33,11 @@ func (m *mockStorage) Add(ctx context.Context, mem storage.Memory, embedding []f
 	return &mem, nil
 }
 
-func (m *mockStorage) Search(ctx context.Context, embedding []float32, opts storage.SearchOpts) ([]storage.Memory, error) {
+func (m *mockStorage) Search(ctx context.Context, embedding []float32, opts types.SearchOpts) ([]types.Memory, error) {
 	return m.memories, nil
 }
 
-func (m *mockStorage) List(ctx context.Context, opts storage.ListOpts) ([]storage.Memory, error) {
+func (m *mockStorage) List(ctx context.Context, opts types.ListOpts) ([]types.Memory, error) {
 	return m.memories, nil
 }
 
@@ -55,12 +55,12 @@ func TestService_Add(t *testing.T) {
 	svc := service.New(store, emb)
 
 	ctx := context.Background()
-	mem, err := svc.Add(ctx, storage.TypeDecision, "auth", "Use JWT", "Stateless")
+	mem, err := svc.Add(ctx, types.TypeDecision, "auth", "Use JWT", "Stateless")
 	if err != nil {
 		t.Fatalf("Add failed: %v", err)
 	}
 
-	if mem.Type != storage.TypeDecision {
+	if mem.Type != types.TypeDecision {
 		t.Errorf("expected type 'decision', got %q", mem.Type)
 	}
 	if mem.Content != "Use JWT" {
@@ -76,7 +76,7 @@ func TestService_Search(t *testing.T) {
 	ctx := context.Background()
 
 	// Add a memory first
-	_, err := svc.Add(ctx, storage.TypeDecision, "auth", "Use JWT", "")
+	_, err := svc.Add(ctx, types.TypeDecision, "auth", "Use JWT", "")
 	if err != nil {
 		t.Fatalf("Add failed: %v", err)
 	}

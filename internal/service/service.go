@@ -6,6 +6,7 @@ import (
 
 	"github.com/MereWhiplash/engram-cogitator/internal/embedder"
 	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 )
 
 // Service contains the business logic for memory operations
@@ -23,7 +24,7 @@ func New(store storage.Storage, emb embedder.Embedder) *Service {
 }
 
 // Add creates a new memory entry
-func (s *Service) Add(ctx context.Context, memType storage.MemoryType, area, content, rationale string) (*storage.Memory, error) {
+func (s *Service) Add(ctx context.Context, memType types.MemoryType, area, content, rationale string) (*types.Memory, error) {
 	if err := memType.Validate(); err != nil {
 		return nil, err
 	}
@@ -39,7 +40,7 @@ func (s *Service) Add(ctx context.Context, memType storage.MemoryType, area, con
 		return nil, fmt.Errorf("failed to generate embedding: %w", err)
 	}
 
-	mem := storage.Memory{
+	mem := types.Memory{
 		Type:      memType,
 		Area:      area,
 		Content:   content,
@@ -50,13 +51,13 @@ func (s *Service) Add(ctx context.Context, memType storage.MemoryType, area, con
 }
 
 // Search finds memories by semantic similarity
-func (s *Service) Search(ctx context.Context, query string, limit int, memType storage.MemoryType, area string) ([]storage.Memory, error) {
+func (s *Service) Search(ctx context.Context, query string, limit int, memType types.MemoryType, area string) ([]types.Memory, error) {
 	embedding, err := s.embedder.EmbedForSearch(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embedding: %w", err)
 	}
 
-	opts := storage.SearchOpts{
+	opts := types.SearchOpts{
 		Limit: limit,
 		Type:  memType,
 		Area:  area,
@@ -66,8 +67,8 @@ func (s *Service) Search(ctx context.Context, query string, limit int, memType s
 }
 
 // List returns recent memories
-func (s *Service) List(ctx context.Context, limit int, memType storage.MemoryType, area string, includeInvalid bool) ([]storage.Memory, error) {
-	opts := storage.ListOpts{
+func (s *Service) List(ctx context.Context, limit int, memType types.MemoryType, area string, includeInvalid bool) ([]types.Memory, error) {
+	opts := types.ListOpts{
 		Limit:          limit,
 		Type:           memType,
 		Area:           area,
@@ -99,8 +100,8 @@ type AddParams struct {
 }
 
 // AddWithContext creates a new memory with full context (for team mode)
-func (s *Service) AddWithContext(ctx context.Context, params AddParams) (*storage.Memory, error) {
-	memType := storage.MemoryType(params.Type)
+func (s *Service) AddWithContext(ctx context.Context, params AddParams) (*types.Memory, error) {
+	memType := types.MemoryType(params.Type)
 	if err := memType.Validate(); err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ func (s *Service) AddWithContext(ctx context.Context, params AddParams) (*storag
 		return nil, fmt.Errorf("failed to generate embedding: %w", err)
 	}
 
-	mem := storage.Memory{
+	mem := types.Memory{
 		Type:        memType,
 		Area:        params.Area,
 		Content:     params.Content,
@@ -129,15 +130,15 @@ func (s *Service) AddWithContext(ctx context.Context, params AddParams) (*storag
 }
 
 // SearchWithRepo finds memories with optional repo filter
-func (s *Service) SearchWithRepo(ctx context.Context, query string, limit int, memType, area, repo string) ([]storage.Memory, error) {
+func (s *Service) SearchWithRepo(ctx context.Context, query string, limit int, memType, area, repo string) ([]types.Memory, error) {
 	embedding, err := s.embedder.EmbedForSearch(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embedding: %w", err)
 	}
 
-	opts := storage.SearchOpts{
+	opts := types.SearchOpts{
 		Limit: limit,
-		Type:  storage.MemoryType(memType),
+		Type:  types.MemoryType(memType),
 		Area:  area,
 		Repo:  repo,
 	}
@@ -146,11 +147,11 @@ func (s *Service) SearchWithRepo(ctx context.Context, query string, limit int, m
 }
 
 // ListWithRepo returns memories with optional repo filter
-func (s *Service) ListWithRepo(ctx context.Context, limit int, memType, area, repo string, includeInvalid bool, offset int) ([]storage.Memory, error) {
-	opts := storage.ListOpts{
+func (s *Service) ListWithRepo(ctx context.Context, limit int, memType, area, repo string, includeInvalid bool, offset int) ([]types.Memory, error) {
+	opts := types.ListOpts{
 		Limit:          limit,
 		Offset:         offset,
-		Type:           storage.MemoryType(memType),
+		Type:           types.MemoryType(memType),
 		Area:           area,
 		Repo:           repo,
 		IncludeInvalid: includeInvalid,

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 )
 
 func TestSQLiteStorage_Add(t *testing.T) {
@@ -25,8 +26,8 @@ func TestSQLiteStorage_Add(t *testing.T) {
 	defer store.Close()
 
 	ctx := context.Background()
-	mem := storage.Memory{
-		Type:      storage.TypeDecision,
+	mem := types.Memory{
+		Type:      types.TypeDecision,
 		Area:      "auth",
 		Content:   "Use JWT tokens",
 		Rationale: "Stateless auth",
@@ -41,7 +42,7 @@ func TestSQLiteStorage_Add(t *testing.T) {
 	if result.ID == 0 {
 		t.Error("expected non-zero ID")
 	}
-	if result.Type != storage.TypeDecision {
+	if result.Type != types.TypeDecision {
 		t.Errorf("expected type 'decision', got %q", result.Type)
 	}
 	if !result.IsValid {
@@ -66,8 +67,8 @@ func TestSQLiteStorage_Search(t *testing.T) {
 	ctx := context.Background()
 
 	// Add a memory first
-	mem := storage.Memory{
-		Type:    storage.TypeDecision,
+	mem := types.Memory{
+		Type:    types.TypeDecision,
 		Area:    "auth",
 		Content: "Use JWT tokens",
 	}
@@ -80,7 +81,7 @@ func TestSQLiteStorage_Search(t *testing.T) {
 	}
 
 	// Search for it
-	results, err := store.Search(ctx, embedding, storage.SearchOpts{Limit: 5})
+	results, err := store.Search(ctx, embedding, types.SearchOpts{Limit: 5})
 	if err != nil {
 		t.Fatalf("Search failed: %v", err)
 	}
@@ -108,8 +109,8 @@ func TestSQLiteStorage_List(t *testing.T) {
 
 	// Add memories
 	for i := 0; i < 3; i++ {
-		mem := storage.Memory{
-			Type:    storage.TypeLearning,
+		mem := types.Memory{
+			Type:    types.TypeLearning,
 			Area:    "api",
 			Content: fmt.Sprintf("Learning %d", i),
 		}
@@ -120,7 +121,7 @@ func TestSQLiteStorage_List(t *testing.T) {
 		}
 	}
 
-	results, err := store.List(ctx, storage.ListOpts{Limit: 10})
+	results, err := store.List(ctx, types.ListOpts{Limit: 10})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -146,8 +147,8 @@ func TestSQLiteStorage_Invalidate(t *testing.T) {
 
 	ctx := context.Background()
 
-	mem := storage.Memory{
-		Type:    storage.TypeDecision,
+	mem := types.Memory{
+		Type:    types.TypeDecision,
 		Area:    "auth",
 		Content: "Old decision",
 	}
@@ -164,7 +165,7 @@ func TestSQLiteStorage_Invalidate(t *testing.T) {
 	}
 
 	// Should not appear in list (excludes invalid by default)
-	results, err := store.List(ctx, storage.ListOpts{Limit: 10})
+	results, err := store.List(ctx, types.ListOpts{Limit: 10})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -189,7 +190,7 @@ func TestSQLiteStorage_Add_InvalidType(t *testing.T) {
 	defer store.Close()
 
 	ctx := context.Background()
-	mem := storage.Memory{
+	mem := types.Memory{
 		Type:    "invalid_type",
 		Area:    "auth",
 		Content: "Should fail",

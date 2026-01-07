@@ -1,18 +1,31 @@
-package tools
+// internal/shim/tools.go
+package shim
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/MereWhiplash/engram-cogitator/internal/service"
 	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Handler holds dependencies for tool handlers
+// APIClient defines the interface for the central API client
+type APIClient interface {
+	Add(ctx context.Context, memType, area, content, rationale string) (*types.Memory, error)
+	Search(ctx context.Context, query string, limit int, memType, area string) ([]types.Memory, error)
+	List(ctx context.Context, limit int, memType, area string, includeInvalid bool) ([]types.Memory, error)
+	Invalidate(ctx context.Context, id int64, supersededBy *int64) error
+}
+
+// Handler holds shim dependencies
 type Handler struct {
-	svc *service.Service
+	client APIClient
+}
+
+// NewHandler creates a new shim handler
+func NewHandler(c APIClient) *Handler {
+	return &Handler{client: c}
 }
 
 // AddInput defines the input schema for ec_add
@@ -79,9 +92,7 @@ func errorResult(msg string) *mcp.CallToolResult {
 }
 
 // Register adds all EC tools to the MCP server
-func Register(server *mcp.Server, svc *service.Service) {
-	h := &Handler{svc: svc}
-
+func Register(server *mcp.Server, h *Handler) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "ec_add",
 		Description: "Add a new memory entry (decision, learning, or pattern)",
@@ -103,12 +114,12 @@ func Register(server *mcp.Server, svc *service.Service) {
 	}, h.List)
 }
 
-func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input AddInput) (*mcp.CallToolResult, AddOutput, error) {
+func (h *Handler) Add(ctx context.Context, _ *mcp.CallToolRequest, input AddInput) (*mcp.CallToolResult, AddOutput, error) {
 	if input.Type == "" || input.Area == "" || input.Content == "" {
 		return errorResult("type, area, and content are required"), AddOutput{}, nil
 	}
 
-	memory, err := h.svc.Add(ctx, types.MemoryType(input.Type), input.Area, input.Content, input.Rationale)
+	memory, err := h.client.Add(ctx, input.Type, input.Area, input.Content, input.Rationale)
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to store memory: %v", err)), AddOutput{}, nil
 	}
@@ -117,7 +128,7 @@ func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input AddIn
 	return textResult(fmt.Sprintf("Memory added successfully:\n%s", string(result))), AddOutput{Memory: memory}, nil
 }
 
-func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
+func (h *Handler) Search(ctx context.Context, _ *mcp.CallToolRequest, input SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
 	if input.Query == "" {
 		return errorResult("query is required"), SearchOutput{}, nil
 	}
@@ -127,7 +138,7 @@ func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input Se
 		limit = 5
 	}
 
-	memories, err := h.svc.Search(ctx, input.Query, limit, types.MemoryType(input.Type), input.Area)
+	memories, err := h.client.Search(ctx, input.Query, limit, input.Type, input.Area)
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to search: %v", err)), SearchOutput{}, nil
 	}
@@ -140,7 +151,7 @@ func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input Se
 	return textResult(string(result)), SearchOutput{Memories: memories}, nil
 }
 
-func (h *Handler) Invalidate(ctx context.Context, req *mcp.CallToolRequest, input InvalidateInput) (*mcp.CallToolResult, InvalidateOutput, error) {
+func (h *Handler) Invalidate(ctx context.Context, _ *mcp.CallToolRequest, input InvalidateInput) (*mcp.CallToolResult, InvalidateOutput, error) {
 	if input.ID == 0 {
 		return errorResult("id is required"), InvalidateOutput{}, nil
 	}
@@ -150,7 +161,7 @@ func (h *Handler) Invalidate(ctx context.Context, req *mcp.CallToolRequest, inpu
 		supersededBy = &input.SupersededBy
 	}
 
-	if err := h.svc.Invalidate(ctx, input.ID, supersededBy); err != nil {
+	if err := h.client.Invalidate(ctx, input.ID, supersededBy); err != nil {
 		return errorResult(fmt.Sprintf("failed to invalidate: %v", err)), InvalidateOutput{}, nil
 	}
 
@@ -162,13 +173,13 @@ func (h *Handler) Invalidate(ctx context.Context, req *mcp.CallToolRequest, inpu
 	return textResult(msg), InvalidateOutput{Message: msg}, nil
 }
 
-func (h *Handler) List(ctx context.Context, req *mcp.CallToolRequest, input ListInput) (*mcp.CallToolResult, ListOutput, error) {
+func (h *Handler) List(ctx context.Context, _ *mcp.CallToolRequest, input ListInput) (*mcp.CallToolResult, ListOutput, error) {
 	limit := input.Limit
 	if limit <= 0 {
 		limit = 10
 	}
 
-	memories, err := h.svc.List(ctx, limit, types.MemoryType(input.Type), input.Area, input.IncludeInvalid)
+	memories, err := h.client.List(ctx, limit, input.Type, input.Area, input.IncludeInvalid)
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to list: %v", err)), ListOutput{}, nil
 	}

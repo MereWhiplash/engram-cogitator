@@ -1,7 +1,9 @@
-// internal/api/types.go
-package api
+// internal/apitypes/types.go
+// Package apitypes contains API request/response types with no CGO dependencies.
+// This allows packages like client and shim to use these types without pulling in sqlite-vec.
+package apitypes
 
-import "github.com/MereWhiplash/engram-cogitator/internal/storage"
+import "github.com/MereWhiplash/engram-cogitator/internal/types"
 
 // AddRequest is the request body for POST /v1/memories
 type AddRequest struct {
@@ -13,7 +15,7 @@ type AddRequest struct {
 
 // AddResponse is the response for POST /v1/memories
 type AddResponse struct {
-	Memory *storage.Memory `json:"memory"`
+	Memory *types.Memory `json:"memory"`
 }
 
 // SearchRequest is the request body for POST /v1/memories/search
@@ -27,19 +29,19 @@ type SearchRequest struct {
 
 // SearchResponse is the response for POST /v1/memories/search
 type SearchResponse struct {
-	Memories []storage.Memory `json:"memories"`
+	Memories []types.Memory `json:"memories"`
 }
 
 // ListResponse is the response for GET /v1/memories
 type ListResponse struct {
-	Memories   []storage.Memory `json:"memories"`
-	Pagination *PaginationInfo  `json:"pagination,omitempty"`
+	Memories   []types.Memory  `json:"memories"`
+	Pagination *PaginationInfo `json:"pagination,omitempty"`
 }
 
 // PaginationInfo provides pagination metadata
 type PaginationInfo struct {
-	Limit  int  `json:"limit"`
-	Offset int  `json:"offset"`
+	Limit   int  `json:"limit"`
+	Offset  int  `json:"offset"`
 	HasMore bool `json:"has_more"`
 }
 

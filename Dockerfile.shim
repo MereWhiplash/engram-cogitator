@@ -1,0 +1,21 @@
+# Dockerfile.shim
+FROM golang:1.23-bookworm AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+ENV GOTOOLCHAIN=auto
+RUN go mod download
+
+COPY . .
+
+# Build shim without CGO - shim only uses storage.Memory struct for JSON, no SQLite
+RUN CGO_ENABLED=0 GOOS=linux go build -o /ec-shim ./cmd/shim
+
+# Runtime image - minimal scratch image since no CGO dependencies
+FROM scratch
+
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /ec-shim /ec-shim
+
+ENTRYPOINT ["/ec-shim"]

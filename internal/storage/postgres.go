@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go"
@@ -78,7 +79,7 @@ func (p *Postgres) Close() error {
 	return nil
 }
 
-func (p *Postgres) Add(ctx context.Context, mem Memory, embedding []float32) (*Memory, error) {
+func (p *Postgres) Add(ctx context.Context, mem types.Memory, embedding []float32) (*types.Memory, error) {
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -111,7 +112,7 @@ func (p *Postgres) Add(ctx context.Context, mem Memory, embedding []float32) (*M
 		return nil, err
 	}
 
-	return &Memory{
+	return &types.Memory{
 		ID:          id,
 		Type:        mem.Type,
 		Area:        mem.Area,
@@ -125,7 +126,7 @@ func (p *Postgres) Add(ctx context.Context, mem Memory, embedding []float32) (*M
 	}, nil
 }
 
-func (p *Postgres) Search(ctx context.Context, embedding []float32, opts SearchOpts) ([]Memory, error) {
+func (p *Postgres) Search(ctx context.Context, embedding []float32, opts types.SearchOpts) ([]types.Memory, error) {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 5
@@ -165,7 +166,7 @@ func (p *Postgres) Search(ctx context.Context, embedding []float32, opts SearchO
 	return p.queryMemories(ctx, query, args...)
 }
 
-func (p *Postgres) List(ctx context.Context, opts ListOpts) ([]Memory, error) {
+func (p *Postgres) List(ctx context.Context, opts types.ListOpts) ([]types.Memory, error) {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 10
@@ -231,16 +232,16 @@ func (p *Postgres) Invalidate(ctx context.Context, id int64, supersededBy *int64
 	return nil
 }
 
-func (p *Postgres) queryMemories(ctx context.Context, query string, args ...interface{}) ([]Memory, error) {
+func (p *Postgres) queryMemories(ctx context.Context, query string, args ...interface{}) ([]types.Memory, error) {
 	rows, err := p.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var memories []Memory
+	var memories []types.Memory
 	for rows.Next() {
-		var m Memory
+		var m types.Memory
 		var memType string
 		var supersededBy *int64
 		var rationale *string
@@ -253,7 +254,7 @@ func (p *Postgres) queryMemories(ctx context.Context, query string, args ...inte
 			return nil, err
 		}
 
-		m.Type = MemoryType(memType)
+		m.Type = types.MemoryType(memType)
 		if rationale != nil {
 			m.Rationale = *rationale
 		}
