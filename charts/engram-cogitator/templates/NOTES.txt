@@ -1,0 +1,32 @@
+Engram Cogitator has been deployed!
+
+{{- if eq .Values.storage.driver "postgres" }}
+Storage: PostgreSQL
+{{- if .Values.storage.postgres.internal }}
+  Internal PostgreSQL (pgvector/pgvector:pg16) is running.
+{{- else }}
+  Using external PostgreSQL at {{ .Values.storage.postgres.host }}:{{ .Values.storage.postgres.port }}
+{{- end }}
+{{- else if eq .Values.storage.driver "mongodb" }}
+Storage: MongoDB (external)
+{{- end }}
+
+{{- if .Values.ollama.enabled }}
+Embeddings: Internal Ollama ({{ .Values.ollama.model }})
+{{- else }}
+Embeddings: External Ollama at {{ .Values.ollama.externalUrl }}
+{{- end }}
+
+To access the API:
+
+  kubectl port-forward svc/{{ include "engram-cogitator.api.name" . }} 8080:8080
+
+Then: curl http://localhost:8080/health
+
+{{- if .Values.ingress.enabled }}
+
+Ingress is enabled. Access via:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- end }}

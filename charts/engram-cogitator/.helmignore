@@ -1,0 +1,28 @@
+# Git
+.git
+.gitignore
+.gitmodules
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation (packaged separately)
+*.md
+LICENSE
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Makefile
+
+# Tests
+tests/
+ci/
