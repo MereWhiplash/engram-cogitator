@@ -15,3 +15,9 @@ maintainers:
     url: https://github.com/MereWhiplash
 sources:
   - https://github.com/MereWhiplash/engram-cogitator
+dependencies:
+  - name: postgresql
+    version: "16.4.1"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: storage.postgres.internal
+    alias: postgresql
