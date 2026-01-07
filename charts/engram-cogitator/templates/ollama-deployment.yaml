@@ -27,21 +27,31 @@ spec:
       {{- end }}
       initContainers:
         - name: pull-model
-          image: ollama/ollama:latest
+          image: "{{ .Values.ollama.image.repository }}:{{ .Values.ollama.image.tag }}"
+          imagePullPolicy: {{ .Values.ollama.image.pullPolicy }}
           command:
             - sh
             - -c
             - |
               ollama serve &
-              sleep 5
+              PID=$!
+              # Wait for server to be ready
+              until curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; do
+                echo "Waiting for Ollama server..."
+                sleep 2
+              done
+              echo "Pulling model {{ .Values.ollama.model }}..."
               ollama pull {{ .Values.ollama.model }}
-              pkill ollama
+              echo "Model pulled successfully"
+              kill $PID 2>/dev/null || true
+              wait $PID 2>/dev/null || true
           volumeMounts:
             - name: ollama-data
               mountPath: /root/.ollama
       containers:
         - name: ollama
-          image: ollama/ollama:latest
+          image: "{{ .Values.ollama.image.repository }}:{{ .Values.ollama.image.tag }}"
+          imagePullPolicy: {{ .Values.ollama.image.pullPolicy }}
           ports:
             - name: http
               containerPort: 11434
