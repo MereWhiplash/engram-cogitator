@@ -1,4 +1,3 @@
-// internal/tools/tools.go
 package tools
 
 import (

@@ -1,4 +1,3 @@
-// internal/embedder/ollama.go
 package embedder
 
 import (

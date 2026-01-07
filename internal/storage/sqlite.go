@@ -1,4 +1,3 @@
-// internal/storage/sqlite.go
 package storage
 
 import (
@@ -66,10 +65,6 @@ func (s *SQLite) Close() error {
 }
 
 func (s *SQLite) Add(ctx context.Context, mem Memory, embedding []float32) (*Memory, error) {
-	if err := mem.Type.Validate(); err != nil {
-		return nil, err
-	}
-
 	tx, err := s.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err

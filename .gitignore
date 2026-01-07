@@ -1,5 +1,7 @@
 # Binaries
 engram-cogitator
+ec-tui
+tui
 *.exe
 
 # Test database

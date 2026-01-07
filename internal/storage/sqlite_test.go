@@ -1,4 +1,3 @@
-// internal/storage/sqlite_test.go
 package storage_test
 
 import (

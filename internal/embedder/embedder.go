@@ -1,4 +1,3 @@
-// internal/embedder/embedder.go
 package embedder
 
 // Embedder generates vector embeddings for text
