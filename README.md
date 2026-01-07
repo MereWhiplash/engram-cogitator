@@ -123,6 +123,129 @@ docker build -t engram-cogitator:local .
 
 ---
 
+## Team Mode (Beta)
+
+Deploy Engram Cogitator for your engineering team. Memories are shared and searchable across all team members and repositories.
+
+### Quick Start (Team)
+
+**1. Deploy to Kubernetes:**
+
+```bash
+# Add Helm repo
+helm repo add engram https://merewhiplash.github.io/engram-cogitator
+helm repo update
+
+# Install with Postgres
+helm install engram engram/engram-cogitator \
+  --namespace engram \
+  --create-namespace \
+  --set storage.postgres.password=<your-password>
+
+# Or with MongoDB Atlas
+helm install engram engram/engram-cogitator \
+  --namespace engram \
+  --create-namespace \
+  --set storage.driver=mongodb \
+  --set storage.mongodb.uri="mongodb+srv://user:pass@cluster.mongodb.net"
+```
+
+**2. Install shim on developer machines:**
+
+```bash
+EC_API_URL=https://engram.yourcompany.com \
+  curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install-team.sh | bash
+```
+
+**3. Restart Claude Code**
+
+### How It Works
+
+```
+Developer A (repo-frontend)     Developer B (repo-backend)
+         |                              |
+    [ec-shim]                      [ec-shim]
+         |                              |
+         +--------- HTTPS -------------+
+                     |
+              [Central API]
+                     |
+         [Postgres/MongoDB + Ollama]
+```
+
+Each developer's shim:
+- Extracts git author from local config
+- Extracts repo from `git remote origin`
+- Forwards all requests to central API with context
+
+### Search Behavior
+
+By default, `ec_search` searches **all repositories** (cross-pollination). Results show who added each memory and which repo it came from:
+
+```json
+{
+  "content": "Use circuit breakers for external API calls",
+  "author_name": "Alice Smith",
+  "author_email": "alice@company.com",
+  "repo": "myorg/backend-api",
+  "type": "pattern"
+}
+```
+
+### Helm Values
+
+Key configuration options:
+
+```yaml
+# Storage backend
+storage:
+  driver: postgres  # or mongodb
+
+  postgres:
+    internal: true    # Deploy StatefulSet
+    # OR
+    internal: false   # External Postgres
+    host: postgres.example.com
+    password: <secret>
+
+  mongodb:
+    uri: mongodb+srv://...
+    database: engram
+
+# Scaling
+api:
+  replicas: 3
+autoscaling:
+  enabled: true
+  maxReplicas: 10
+
+# Ingress
+ingress:
+  enabled: true
+  hosts:
+    - host: engram.yourcompany.com
+```
+
+See [values.yaml](charts/engram-cogitator/values.yaml) for all options.
+
+### Architecture
+
+| Component | Purpose |
+|-----------|---------|
+| API Server | HTTP API handling memory operations |
+| Ollama | Local embedding generation (nomic-embed-text) |
+| Postgres/MongoDB | Persistent storage with vector search |
+| Shim | MCP bridge on developer machines |
+
+### Data Model (Team)
+
+Memories include attribution:
+- `author_name` / `author_email` - Who added it
+- `repo` - Which repository (org/repo format)
+- All existing fields (type, area, content, rationale)
+
+---
+
 <p align="center">
   <em>Praise the Omnissiah. Store your memories. Ship your code.</em><br>
   <em>The Emperor Protects, but version control saves.</em>
