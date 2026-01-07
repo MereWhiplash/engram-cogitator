@@ -74,10 +74,14 @@ Ollama component name
 {{- end }}
 
 {{/*
-Postgres component name
+Postgres service name - uses Bitnami naming when internal
 */}}
 {{- define "engram-cogitator.postgres.name" -}}
-{{- printf "%s-postgres" (include "engram-cogitator.fullname" .) }}
+{{- if .Values.storage.postgres.internal }}
+{{- printf "%s-postgresql" .Release.Name }}
+{{- else }}
+{{- .Values.storage.postgres.host }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -85,15 +89,30 @@ Postgres DSN
 */}}
 {{- define "engram-cogitator.postgres.dsn" -}}
 {{- if .Values.storage.postgres.internal }}
-{{- printf "postgres://%s:$(POSTGRES_PASSWORD)@%s:5432/%s?sslmode=disable" .Values.storage.postgres.username (include "engram-cogitator.postgres.name" .) .Values.storage.postgres.database }}
+{{- printf "postgres://%s:$(POSTGRES_PASSWORD)@%s:5432/%s?sslmode=disable" .Values.postgresql.auth.username (include "engram-cogitator.postgres.name" .) .Values.postgresql.auth.database }}
 {{- else }}
 {{- printf "postgres://%s:$(POSTGRES_PASSWORD)@%s:%d/%s?sslmode=disable" .Values.storage.postgres.username .Values.storage.postgres.host (.Values.storage.postgres.port | int) .Values.storage.postgres.database }}
 {{- end }}
 {{- end }}
 
 {{/*
-Ollama URL
+Postgres secret name
+*/}}
+{{- define "engram-cogitator.postgres.secretName" -}}
+{{- if .Values.storage.postgres.internal }}
+{{- printf "%s-postgresql" .Release.Name }}
+{{- else }}
+{{- required "storage.postgres.existingSecret is required when using external postgres" .Values.storage.postgres.existingSecret }}
+{{- end }}
+{{- end }}
+
+{{/*
+Ollama URL - internal service or external URL
 */}}
 {{- define "engram-cogitator.ollama.url" -}}
+{{- if .Values.ollama.enabled }}
 {{- printf "http://%s:11434" (include "engram-cogitator.ollama.name" .) }}
+{{- else }}
+{{- required "ollama.externalUrl is required when ollama.enabled is false" .Values.ollama.externalUrl }}
+{{- end }}
 {{- end }}
