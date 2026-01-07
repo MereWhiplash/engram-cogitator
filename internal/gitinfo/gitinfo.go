@@ -14,8 +14,9 @@ type Info struct {
 	Repo        string
 }
 
-// Get extracts git info from the current directory
-func Get() (*Info, error) {
+// Get extracts git info from the current directory.
+// Returns partial info if some git commands fail (e.g., not in a git repo).
+func Get() *Info {
 	info := &Info{}
 
 	// Get author name
@@ -33,7 +34,7 @@ func Get() (*Info, error) {
 		info.Repo = NormalizeRemoteURL(strings.TrimSpace(string(out)))
 	}
 
-	return info, nil
+	return info
 }
 
 // NormalizeRemoteURL converts various git remote URL formats to "org/repo"

@@ -49,6 +49,12 @@ install_team_mode() {
         exit 1
     fi
 
+    # Check if ~/.local/bin is in PATH
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        echo -e "${YELLOW}Warning: ${HOME}/.local/bin is not in your PATH.${NC}"
+        echo "Add it to your shell profile: export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
+
     # Remove existing config if present
     claude mcp remove engram-cogitator 2>/dev/null || true
 

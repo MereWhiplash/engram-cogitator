@@ -6,62 +6,76 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/MereWhiplash/engram-cogitator/internal/client"
-	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// APIClient defines the interface for the central API client
+type APIClient interface {
+	Add(ctx context.Context, memType, area, content, rationale string) (*types.Memory, error)
+	Search(ctx context.Context, query string, limit int, memType, area string) ([]types.Memory, error)
+	List(ctx context.Context, limit int, memType, area string, includeInvalid bool) ([]types.Memory, error)
+	Invalidate(ctx context.Context, id int64, supersededBy *int64) error
+}
+
 // Handler holds shim dependencies
 type Handler struct {
-	client *client.Client
+	client APIClient
 }
 
 // NewHandler creates a new shim handler
-func NewHandler(c *client.Client) *Handler {
+func NewHandler(c APIClient) *Handler {
 	return &Handler{client: c}
 }
 
-// Input/Output types (same as tools package)
+// AddInput defines the input schema for ec_add
 type AddInput struct {
-	Type      string `json:"type" jsonschema:"required"`
-	Area      string `json:"area" jsonschema:"required"`
-	Content   string `json:"content" jsonschema:"required"`
-	Rationale string `json:"rationale,omitempty"`
+	Type      string `json:"type" jsonschema:"required" jsonschema_description:"Type of memory: decision, learning, or pattern"`
+	Area      string `json:"area" jsonschema:"required" jsonschema_description:"Domain area (e.g. auth, permissions, ui, api)"`
+	Content   string `json:"content" jsonschema:"required" jsonschema_description:"The actual content to remember"`
+	Rationale string `json:"rationale,omitempty" jsonschema_description:"Why this matters or additional context"`
 }
 
+// AddOutput defines the output schema for ec_add
 type AddOutput struct {
-	Memory *storage.Memory `json:"memory"`
+	Memory *types.Memory `json:"memory"`
 }
 
+// SearchInput defines the input schema for ec_search
 type SearchInput struct {
-	Query string `json:"query" jsonschema:"required"`
-	Limit int    `json:"limit,omitempty"`
-	Type  string `json:"type,omitempty"`
-	Area  string `json:"area,omitempty"`
+	Query string `json:"query" jsonschema:"required" jsonschema_description:"Search query to find relevant memories"`
+	Limit int    `json:"limit,omitempty" jsonschema_description:"Maximum number of results (default: 5)"`
+	Type  string `json:"type,omitempty" jsonschema_description:"Filter by type (decision, learning, or pattern)"`
+	Area  string `json:"area,omitempty" jsonschema_description:"Filter by domain area"`
 }
 
+// SearchOutput defines the output schema for ec_search
 type SearchOutput struct {
-	Memories []storage.Memory `json:"memories"`
+	Memories []types.Memory `json:"memories"`
 }
 
+// InvalidateInput defines the input schema for ec_invalidate
 type InvalidateInput struct {
-	ID           int64 `json:"id" jsonschema:"required"`
-	SupersededBy int64 `json:"superseded_by,omitempty"`
+	ID           int64 `json:"id" jsonschema:"required" jsonschema_description:"ID of the memory to invalidate"`
+	SupersededBy int64 `json:"superseded_by,omitempty" jsonschema_description:"ID of the memory that supersedes this one"`
 }
 
+// InvalidateOutput defines the output schema for ec_invalidate
 type InvalidateOutput struct {
 	Message string `json:"message"`
 }
 
+// ListInput defines the input schema for ec_list
 type ListInput struct {
-	Limit          int    `json:"limit,omitempty"`
-	Type           string `json:"type,omitempty"`
-	Area           string `json:"area,omitempty"`
-	IncludeInvalid bool   `json:"include_invalid,omitempty"`
+	Limit          int    `json:"limit,omitempty" jsonschema_description:"Maximum number of results (default: 10)"`
+	Type           string `json:"type,omitempty" jsonschema_description:"Filter by type (decision, learning, or pattern)"`
+	Area           string `json:"area,omitempty" jsonschema_description:"Filter by domain area"`
+	IncludeInvalid bool   `json:"include_invalid,omitempty" jsonschema_description:"Include invalidated entries (default: false)"`
 }
 
+// ListOutput defines the output schema for ec_list
 type ListOutput struct {
-	Memories []storage.Memory `json:"memories"`
+	Memories []types.Memory `json:"memories"`
 }
 
 func textResult(text string) *mcp.CallToolResult {
@@ -100,7 +114,7 @@ func Register(server *mcp.Server, h *Handler) {
 	}, h.List)
 }
 
-func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input AddInput) (*mcp.CallToolResult, AddOutput, error) {
+func (h *Handler) Add(ctx context.Context, _ *mcp.CallToolRequest, input AddInput) (*mcp.CallToolResult, AddOutput, error) {
 	if input.Type == "" || input.Area == "" || input.Content == "" {
 		return errorResult("type, area, and content are required"), AddOutput{}, nil
 	}
@@ -114,7 +128,7 @@ func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input AddIn
 	return textResult(fmt.Sprintf("Memory added successfully:\n%s", string(result))), AddOutput{Memory: memory}, nil
 }
 
-func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
+func (h *Handler) Search(ctx context.Context, _ *mcp.CallToolRequest, input SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
 	if input.Query == "" {
 		return errorResult("query is required"), SearchOutput{}, nil
 	}
@@ -130,14 +144,14 @@ func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input Se
 	}
 
 	if len(memories) == 0 {
-		return textResult("No matching memories found."), SearchOutput{Memories: []storage.Memory{}}, nil
+		return textResult("No matching memories found."), SearchOutput{Memories: []types.Memory{}}, nil
 	}
 
 	result, _ := json.MarshalIndent(memories, "", "  ")
 	return textResult(string(result)), SearchOutput{Memories: memories}, nil
 }
 
-func (h *Handler) Invalidate(ctx context.Context, req *mcp.CallToolRequest, input InvalidateInput) (*mcp.CallToolResult, InvalidateOutput, error) {
+func (h *Handler) Invalidate(ctx context.Context, _ *mcp.CallToolRequest, input InvalidateInput) (*mcp.CallToolResult, InvalidateOutput, error) {
 	if input.ID == 0 {
 		return errorResult("id is required"), InvalidateOutput{}, nil
 	}
@@ -159,7 +173,7 @@ func (h *Handler) Invalidate(ctx context.Context, req *mcp.CallToolRequest, inpu
 	return textResult(msg), InvalidateOutput{Message: msg}, nil
 }
 
-func (h *Handler) List(ctx context.Context, req *mcp.CallToolRequest, input ListInput) (*mcp.CallToolResult, ListOutput, error) {
+func (h *Handler) List(ctx context.Context, _ *mcp.CallToolRequest, input ListInput) (*mcp.CallToolResult, ListOutput, error) {
 	limit := input.Limit
 	if limit <= 0 {
 		limit = 10
@@ -171,7 +185,7 @@ func (h *Handler) List(ctx context.Context, req *mcp.CallToolRequest, input List
 	}
 
 	if len(memories) == 0 {
-		return textResult("No memories found."), ListOutput{Memories: []storage.Memory{}}, nil
+		return textResult("No memories found."), ListOutput{Memories: []types.Memory{}}, nil
 	}
 
 	result, _ := json.MarshalIndent(memories, "", "  ")

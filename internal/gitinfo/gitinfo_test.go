@@ -29,3 +29,17 @@ func TestNormalizeRemoteURL(t *testing.T) {
 		})
 	}
 }
+
+func TestGet(t *testing.T) {
+	// Test that Get() doesn't panic and returns a non-nil Info
+	// The actual values depend on the git config of the test environment
+	info := gitinfo.Get()
+	if info == nil {
+		t.Fatal("Get() returned nil")
+	}
+
+	// Verify the struct fields are accessible (may be empty if not in a git repo)
+	_ = info.AuthorName
+	_ = info.AuthorEmail
+	_ = info.Repo
+}

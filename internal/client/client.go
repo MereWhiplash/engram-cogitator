@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
-	"github.com/MereWhiplash/engram-cogitator/internal/api"
+	"github.com/MereWhiplash/engram-cogitator/internal/apitypes"
 	"github.com/MereWhiplash/engram-cogitator/internal/gitinfo"
-	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 )
 
 // Client is an HTTP client for the central API
@@ -66,9 +68,18 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 	return c.http.Do(req)
 }
 
+// parseErrorResponse extracts error message from API response
+func parseErrorResponse(resp *http.Response) error {
+	var errResp apitypes.ErrorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil || errResp.Error == "" {
+		return fmt.Errorf("API error: status %d", resp.StatusCode)
+	}
+	return fmt.Errorf("API error: %s", errResp.Error)
+}
+
 // Add creates a new memory
-func (c *Client) Add(ctx context.Context, memType, area, content, rationale string) (*storage.Memory, error) {
-	req := api.AddRequest{
+func (c *Client) Add(ctx context.Context, memType, area, content, rationale string) (*types.Memory, error) {
+	req := apitypes.AddRequest{
 		Type:      memType,
 		Area:      area,
 		Content:   content,
@@ -82,12 +93,10 @@ func (c *Client) Add(ctx context.Context, memType, area, content, rationale stri
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		var errResp api.ErrorResponse
-		json.NewDecoder(resp.Body).Decode(&errResp)
-		return nil, fmt.Errorf("API error: %s", errResp.Error)
+		return nil, parseErrorResponse(resp)
 	}
 
-	var result api.AddResponse
+	var result apitypes.AddResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
@@ -96,8 +105,8 @@ func (c *Client) Add(ctx context.Context, memType, area, content, rationale stri
 }
 
 // Search finds memories by query
-func (c *Client) Search(ctx context.Context, query string, limit int, memType, area string) ([]storage.Memory, error) {
-	req := api.SearchRequest{
+func (c *Client) Search(ctx context.Context, query string, limit int, memType, area string) ([]types.Memory, error) {
+	req := apitypes.SearchRequest{
 		Query: query,
 		Limit: limit,
 		Type:  memType,
@@ -111,12 +120,10 @@ func (c *Client) Search(ctx context.Context, query string, limit int, memType, a
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		var errResp api.ErrorResponse
-		json.NewDecoder(resp.Body).Decode(&errResp)
-		return nil, fmt.Errorf("API error: %s", errResp.Error)
+		return nil, parseErrorResponse(resp)
 	}
 
-	var result api.SearchResponse
+	var result apitypes.SearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
@@ -125,17 +132,19 @@ func (c *Client) Search(ctx context.Context, query string, limit int, memType, a
 }
 
 // List returns recent memories
-func (c *Client) List(ctx context.Context, limit int, memType, area string, includeInvalid bool) ([]storage.Memory, error) {
-	path := fmt.Sprintf("/v1/memories?limit=%d", limit)
+func (c *Client) List(ctx context.Context, limit int, memType, area string, includeInvalid bool) ([]types.Memory, error) {
+	params := url.Values{}
+	params.Set("limit", strconv.Itoa(limit))
 	if memType != "" {
-		path += "&type=" + memType
+		params.Set("type", memType)
 	}
 	if area != "" {
-		path += "&area=" + area
+		params.Set("area", area)
 	}
 	if includeInvalid {
-		path += "&include_invalid=true"
+		params.Set("include_invalid", "true")
 	}
+	path := "/v1/memories?" + params.Encode()
 
 	resp, err := c.doRequest(ctx, "GET", path, nil)
 	if err != nil {
@@ -144,12 +153,10 @@ func (c *Client) List(ctx context.Context, limit int, memType, area string, incl
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		var errResp api.ErrorResponse
-		json.NewDecoder(resp.Body).Decode(&errResp)
-		return nil, fmt.Errorf("API error: %s", errResp.Error)
+		return nil, parseErrorResponse(resp)
 	}
 
-	var result api.ListResponse
+	var result apitypes.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
@@ -159,7 +166,7 @@ func (c *Client) List(ctx context.Context, limit int, memType, area string, incl
 
 // Invalidate marks a memory as invalid
 func (c *Client) Invalidate(ctx context.Context, id int64, supersededBy *int64) error {
-	req := api.InvalidateRequest{
+	req := apitypes.InvalidateRequest{
 		SupersededBy: supersededBy,
 	}
 
@@ -171,9 +178,7 @@ func (c *Client) Invalidate(ctx context.Context, id int64, supersededBy *int64) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		var errResp api.ErrorResponse
-		json.NewDecoder(resp.Body).Decode(&errResp)
-		return fmt.Errorf("API error: %s", errResp.Error)
+		return parseErrorResponse(resp)
 	}
 
 	return nil

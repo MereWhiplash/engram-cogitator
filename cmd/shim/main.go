@@ -29,13 +29,11 @@ func main() {
 	}
 
 	// Extract git info
-	gitInfo, err := gitinfo.Get()
-	if err != nil {
-		log.Printf("Warning: failed to get git info: %v", err)
-		gitInfo = &gitinfo.Info{}
-	}
+	gitInfo := gitinfo.Get()
 
-	log.Printf("Git context: author=%s <%s>, repo=%s", gitInfo.AuthorName, gitInfo.AuthorEmail, gitInfo.Repo)
+	if os.Getenv("EC_DEBUG") != "" {
+		log.Printf("Git context: author=%s <%s>, repo=%s", gitInfo.AuthorName, gitInfo.AuthorEmail, gitInfo.Repo)
+	}
 
 	// Create API client
 	apiClient := client.New(*apiURL, gitInfo)

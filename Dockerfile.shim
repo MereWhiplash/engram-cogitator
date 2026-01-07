@@ -1,12 +1,6 @@
 # Dockerfile.shim
 FROM golang:1.23-bookworm AS builder
 
-# Install build dependencies for CGO (sqlite-vec transitive dependency)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libsqlite3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -15,17 +9,13 @@ RUN go mod download
 
 COPY . .
 
-# Build shim with CGO (required for storage types)
-RUN CGO_ENABLED=1 GOOS=linux go build -o /ec-shim ./cmd/shim
+# Build shim without CGO - shim only uses storage.Memory struct for JSON, no SQLite
+RUN CGO_ENABLED=0 GOOS=linux go build -o /ec-shim ./cmd/shim
 
-# Runtime image
-FROM debian:bookworm-slim
+# Runtime image - minimal scratch image since no CGO dependencies
+FROM scratch
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libsqlite3-0 \
-    && rm -rf /var/lib/apt/lists/*
-
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /ec-shim /ec-shim
 
 ENTRYPOINT ["/ec-shim"]
