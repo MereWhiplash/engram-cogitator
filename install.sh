@@ -7,6 +7,75 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Team mode installation
+install_team_mode() {
+    echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║  Engram Cogitator - Team Mode Install     ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
+    echo ""
+
+    if [ -z "$EC_API_URL" ]; then
+        echo -e "${RED}Error: EC_API_URL environment variable required for team mode${NC}"
+        echo "Usage: EC_API_URL=https://engram.company.com ./install.sh --team"
+        exit 1
+    fi
+
+    # Check for Claude Code CLI
+    if ! command -v claude &> /dev/null; then
+        echo -e "${RED}Error: Claude Code CLI is not installed.${NC}"
+        echo "Please install Claude Code first: https://docs.anthropic.com/en/docs/claude-code"
+        exit 1
+    fi
+
+    # Determine OS and architecture
+    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    ARCH=$(uname -m)
+    case $ARCH in
+        x86_64) ARCH="amd64" ;;
+        aarch64|arm64) ARCH="arm64" ;;
+    esac
+
+    # Download shim binary
+    echo -e "${YELLOW}Downloading shim binary...${NC}"
+    SHIM_URL="https://github.com/MereWhiplash/engram-cogitator/releases/latest/download/ec-shim-${OS}-${ARCH}"
+    SHIM_PATH="${HOME}/.local/bin/ec-shim"
+    mkdir -p "$(dirname "$SHIM_PATH")"
+
+    if curl -sSL "$SHIM_URL" -o "$SHIM_PATH" 2>/dev/null; then
+        chmod +x "$SHIM_PATH"
+    else
+        echo -e "${RED}Error: Failed to download shim binary.${NC}"
+        echo "You may need to build from source: go build ./cmd/shim"
+        exit 1
+    fi
+
+    # Remove existing config if present
+    claude mcp remove engram-cogitator 2>/dev/null || true
+
+    # Configure MCP with shim
+    echo -e "${YELLOW}Configuring MCP server (team mode)...${NC}"
+    claude mcp add engram-cogitator \
+        --scope user \
+        -- "$SHIM_PATH" --api-url "$EC_API_URL"
+
+    echo ""
+    echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║     Team Mode Installation Complete!      ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
+    echo ""
+    echo "Shim installed to: $SHIM_PATH"
+    echo "API URL: $EC_API_URL"
+    echo ""
+    echo -e "${YELLOW}Restart Claude Code to activate.${NC}"
+    echo ""
+}
+
+# Check for team mode flag
+if [ "$1" = "--team" ]; then
+    install_team_mode
+    exit 0
+fi
+
 EC_VERSION="latest"
 EC_IMAGE="ghcr.io/merewhiplash/engram-cogitator:${EC_VERSION}"
 OLLAMA_IMAGE="ollama/ollama:latest"
