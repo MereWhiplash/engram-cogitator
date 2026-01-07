@@ -1,0 +1,15 @@
+# charts/engram-cogitator/templates/pdb.yaml
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "engram-cogitator.api.name" . }}
+  labels:
+    {{- include "engram-cogitator.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "engram-cogitator.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+{{- end }}
