@@ -17,7 +17,14 @@ import (
 )
 
 func main() {
-	dbPath := flag.String("db-path", "/data/memory.db", "Path to SQLite database")
+	// Storage flags
+	storageDriver := flag.String("storage-driver", "sqlite", "Storage driver: sqlite, postgres, mongodb")
+	dbPath := flag.String("db-path", "/data/memory.db", "Path to SQLite database (sqlite driver)")
+	postgresDSN := flag.String("postgres-dsn", "", "PostgreSQL connection string (postgres driver)")
+	mongoURI := flag.String("mongodb-uri", "", "MongoDB connection URI (mongodb driver)")
+	mongoDatabase := flag.String("mongodb-database", "engram", "MongoDB database name (mongodb driver)")
+
+	// Embedder flags
 	ollamaURL := flag.String("ollama-url", "http://ollama:11434", "Ollama API URL")
 	embeddingModel := flag.String("embedding-model", "nomic-embed-text", "Ollama embedding model")
 
@@ -27,9 +34,20 @@ func main() {
 
 	flag.Parse()
 
+	ctx := context.Background()
+
+	// Build storage config
+	cfg := storage.Config{
+		Driver:          *storageDriver,
+		SQLitePath:      *dbPath,
+		PostgresDSN:     *postgresDSN,
+		MongoDBURI:      *mongoURI,
+		MongoDBDatabase: *mongoDatabase,
+	}
+
 	// CLI mode - list memories
 	if *listFlag {
-		if err := runList(*dbPath, *limitFlag); err != nil {
+		if err := runList(ctx, cfg, *limitFlag); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -37,7 +55,7 @@ func main() {
 	}
 
 	// Initialize storage
-	store, err := storage.NewSQLite(*dbPath)
+	store, err := storage.New(ctx, cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
@@ -59,7 +77,7 @@ func main() {
 	tools.Register(server, svc)
 
 	// Handle graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
@@ -78,14 +96,13 @@ func main() {
 	}
 }
 
-func runList(dbPath string, limit int) error {
-	store, err := storage.NewSQLite(dbPath)
+func runList(ctx context.Context, cfg storage.Config, limit int) error {
+	store, err := storage.New(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to open storage: %w", err)
 	}
 	defer store.Close()
 
-	ctx := context.Background()
 	memories, err := store.List(ctx, storage.ListOpts{Limit: limit})
 	if err != nil {
 		return fmt.Errorf("failed to list memories: %w", err)
