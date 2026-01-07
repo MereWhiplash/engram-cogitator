@@ -86,3 +86,74 @@ func (s *Service) Invalidate(ctx context.Context, id int64, supersededBy *int64)
 func (s *Service) Close() error {
 	return s.storage.Close()
 }
+
+// AddParams holds parameters for AddWithContext
+type AddParams struct {
+	Type        string
+	Area        string
+	Content     string
+	Rationale   string
+	AuthorName  string
+	AuthorEmail string
+	Repo        string
+}
+
+// AddWithContext creates a new memory with full context (for team mode)
+func (s *Service) AddWithContext(ctx context.Context, params AddParams) (*storage.Memory, error) {
+	memType := storage.MemoryType(params.Type)
+	if err := memType.Validate(); err != nil {
+		return nil, err
+	}
+
+	textToEmbed := fmt.Sprintf("%s: %s", params.Area, params.Content)
+	if params.Rationale != "" {
+		textToEmbed += " " + params.Rationale
+	}
+
+	embedding, err := s.embedder.EmbedForStorage(textToEmbed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate embedding: %w", err)
+	}
+
+	mem := storage.Memory{
+		Type:        memType,
+		Area:        params.Area,
+		Content:     params.Content,
+		Rationale:   params.Rationale,
+		AuthorName:  params.AuthorName,
+		AuthorEmail: params.AuthorEmail,
+		Repo:        params.Repo,
+	}
+
+	return s.storage.Add(ctx, mem, embedding)
+}
+
+// SearchWithRepo finds memories with optional repo filter
+func (s *Service) SearchWithRepo(ctx context.Context, query string, limit int, memType, area, repo string) ([]storage.Memory, error) {
+	embedding, err := s.embedder.EmbedForSearch(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate embedding: %w", err)
+	}
+
+	opts := storage.SearchOpts{
+		Limit: limit,
+		Type:  storage.MemoryType(memType),
+		Area:  area,
+		Repo:  repo,
+	}
+
+	return s.storage.Search(ctx, embedding, opts)
+}
+
+// ListWithRepo returns memories with optional repo filter
+func (s *Service) ListWithRepo(ctx context.Context, limit int, memType, area, repo string, includeInvalid bool) ([]storage.Memory, error) {
+	opts := storage.ListOpts{
+		Limit:          limit,
+		Type:           storage.MemoryType(memType),
+		Area:           area,
+		Repo:           repo,
+		IncludeInvalid: includeInvalid,
+	}
+
+	return s.storage.List(ctx, opts)
+}
