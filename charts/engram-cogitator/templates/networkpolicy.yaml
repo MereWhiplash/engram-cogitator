@@ -1,0 +1,115 @@
+# charts/engram-cogitator/templates/networkpolicy.yaml
+{{- if .Values.networkPolicy.enabled }}
+---
+# API: allow ingress from anywhere, egress to postgres/mongodb and ollama
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "engram-cogitator.api.name" . }}
+  labels:
+    {{- include "engram-cogitator.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "engram-cogitator.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # DNS
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+    # Ollama
+    {{- if .Values.ollama.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "engram-cogitator.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: ollama
+      ports:
+        - protocol: TCP
+          port: 11434
+    {{- end }}
+    # Postgres (internal)
+    {{- if and (eq .Values.storage.driver "postgres") .Values.storage.postgres.internal }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "engram-cogitator.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
+    # Postgres (external) or MongoDB - allow all egress on relevant ports
+    {{- if or (and (eq .Values.storage.driver "postgres") (not .Values.storage.postgres.internal)) (eq .Values.storage.driver "mongodb") }}
+    - to: []
+      ports:
+        {{- if eq .Values.storage.driver "postgres" }}
+        - protocol: TCP
+          port: {{ .Values.storage.postgres.port }}
+        {{- else }}
+        - protocol: TCP
+          port: 27017
+        {{- end }}
+    {{- end }}
+---
+# Ollama: only allow from API
+{{- if .Values.ollama.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "engram-cogitator.ollama.name" . }}
+  labels:
+    {{- include "engram-cogitator.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "engram-cogitator.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ollama
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "engram-cogitator.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: api
+      ports:
+        - protocol: TCP
+          port: 11434
+{{- end }}
+---
+# Postgres: only allow from API
+{{- if and (eq .Values.storage.driver "postgres") .Values.storage.postgres.internal }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "engram-cogitator.postgres.name" . }}
+  labels:
+    {{- include "engram-cogitator.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "engram-cogitator.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "engram-cogitator.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: api
+      ports:
+        - protocol: TCP
+          port: 5432
+{{- end }}
+{{- end }}
