@@ -30,19 +30,35 @@ storage:
   driver: postgres
 
   postgres:
-    # Use internal StatefulSet or external
+    # Use internal Bitnami PostgreSQL or external
     internal: true
     # External connection (used if internal: false)
     host: ""
     port: 5432
     database: engram
     username: engram
-    # Password from secret
+    # For external: password from existing secret
     existingSecret: ""
     existingSecretKey: password
-    # If no existingSecret, create one with this password
-    password: ""
-    # Internal StatefulSet settings
+
+  mongodb:
+    # MongoDB Atlas or self-hosted URI
+    database: engram
+    # URI from secret (required when driver: mongodb)
+    existingSecret: ""
+    existingSecretKey: uri
+
+# Bitnami PostgreSQL subchart configuration
+# Only used when storage.driver=postgres AND storage.postgres.internal=true
+postgresql:
+  enabled: false  # Controlled by condition in Chart.yaml
+  auth:
+    username: engram
+    database: engram
+    # Set password at install time: --set postgresql.auth.password=xxx
+  primary:
+    persistence:
+      size: 10Gi
     resources:
       requests:
         memory: 512Mi
@@ -50,21 +66,18 @@ storage:
       limits:
         memory: 1Gi
         cpu: 500m
-    persistence:
-      size: 10Gi
-      storageClass: ""
-
-  mongodb:
-    # User provides URI (Atlas or self-hosted)
-    uri: ""
-    database: engram
-    # URI from secret
-    existingSecret: ""
-    existingSecretKey: uri
+  image:
+    tag: "16"  # Use PostgreSQL 16 for pgvector compatibility
 
 # Ollama configuration
 ollama:
   enabled: true
+  # External Ollama URL (used when enabled: false)
+  externalUrl: ""
+  image:
+    repository: ollama/ollama
+    tag: "0.5.4"
+    pullPolicy: IfNotPresent
   model: nomic-embed-text
   resources:
     requests:
