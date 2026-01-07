@@ -1,0 +1,28 @@
+# Dockerfile.api
+FROM golang:1.24-bookworm AS builder
+
+WORKDIR /app
+
+# Install build dependencies for CGO and sqlite
+RUN apt-get update && apt-get install -y gcc libc6-dev libsqlite3-dev && rm -rf /var/lib/apt/lists/*
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source
+COPY . .
+
+# Build API server (CGO required for sqlite-vec dependency)
+RUN CGO_ENABLED=1 GOOS=linux go build -o /ec-api ./cmd/api
+
+# Runtime image (use debian since we need glibc for CGO binary)
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /ec-api /ec-api
+
+EXPOSE 8080
+
+ENTRYPOINT ["/ec-api"]
