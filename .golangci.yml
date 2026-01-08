@@ -22,7 +22,3 @@ formatters:
     goimports:
       local-prefixes:
         - github.com/MereWhiplash/engram-cogitator
-
-exclusions:
-  paths:
-    - sqlite_nocgo\.go
