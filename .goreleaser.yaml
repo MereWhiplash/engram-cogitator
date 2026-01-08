@@ -20,6 +20,9 @@ builds:
     goarch:
       - amd64
       - arm64
+    # NOTE: linux/arm64 excluded because CGO cross-compilation requires
+    # native ARM64 runners or complex toolchain setup. Users on ARM64 Linux
+    # should build from source: CGO_ENABLED=1 go build ./cmd/server
     ignore:
       - goos: linux
         goarch: arm64

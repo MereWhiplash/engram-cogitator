@@ -10,144 +10,280 @@
 </p>
 
 <p align="center">
-  Persistent semantic memory for Claude Code sessions.<br>
+  Persistent semantic memory for AI coding assistants.<br>
   By the grace of the Omnissiah, your decisions shall not be lost to the warp.
+</p>
+
+<p align="center">
+  <strong>Works with:</strong> Claude Code, Cursor, Cline, Windsurf, and any MCP-compatible client
 </p>
 
 ---
 
-## The Sacred Rites of Installation
+## Quick Start (Solo Mode)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install.sh | bash
 ```
 
-**Prerequisites:** Docker daemon running (the good kind of daemon, not the Chaos kind), Claude Code CLI installed. Offer a prayer to the Machine Spirit (optional but recommended). Cup of tea (mandatory if Irish).
+**Prerequisites:** Docker running. That's it. The script handles everything else.
+
+---
 
 ## What It Does
 
-The Engram Cogitator serves as an auxiliary memory core for your Claude Code sessions. Like a good Irishman's grudge, it never forgets. It stores:
+The Engram Cogitator serves as an auxiliary memory core for your AI coding sessions. Like a good Irishman's grudge, it never forgets. It stores:
 
-- **Decisions** - Sacred architectural choices (why X over Y)
-- **Learnings** - Hard-won knowledge extracted from the codebase (the stuff that made you say "ah for feck's sake")
-- **Patterns** - The recurring litanies of your craft
+| Type          | What It Captures                                |
+| ------------- | ----------------------------------------------- |
+| **Decisions** | Architectural choices and the "why" behind them |
+| **Learnings** | Hard-won knowledge from debugging sessions      |
+| **Patterns**  | Recurring solutions and team conventions        |
 
-All memories are searchable by semantic similarity using local embeddings (Ollama + nomic-embed-text). No data leaves your machine - the Inquisition need not be concerned, and sure GDPR is grand.
+All memories are searchable by semantic similarity. Ask "how do we handle auth?" and it finds relevant memories even if they don't contain the word "auth".
 
-## MCP Tools (The Four Holy Functions)
+---
 
-| Tool            | Purpose                                                                             |
-| --------------- | ----------------------------------------------------------------------------------- |
-| `ec_add`        | Commit a memory to the cogitator's data-stacks                                      |
-| `ec_search`     | Query the machine spirit for relevant wisdom                                        |
-| `ec_list`       | Enumerate recent memory engrams                                                     |
-| `ec_invalidate` | Perform the Rite of Deletion (soft-delete, like how you "deleted" your ex's number) |
+## Two Modes
 
-## Manual Setup (For the Truly Devoted)
+|              | Solo Mode                   | Team Mode                        |
+| ------------ | --------------------------- | -------------------------------- |
+| **For**      | Individual developers       | Engineering teams                |
+| **Storage**  | Local SQLite per project    | Shared Postgres/MongoDB          |
+| **Memories** | Private to you              | Shared across team               |
+| **Setup**    | One command                 | Kubernetes + Helm                |
+| **Best for** | Personal projects, learning | Cross-pollinating team knowledge |
 
-If the sacred curl script fails you (sure it'll be grand):
+---
+
+## Solo Mode
+
+Your memories stay local, stored in `.engram/memory.db` per project. No data leaves your machine.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Your Machine                       │
+│                                                      │
+│  ┌──────────────┐      MCP/stdio      ┌──────────┐  │
+│  │ Claude Code  │◄───────────────────►│ EC Server│  │
+│  │   Cursor     │                     │ (Docker) │  │
+│  │   Cline      │                     └────┬─────┘  │
+│  │   Windsurf   │                          │        │
+│  └──────────────┘                          │        │
+│                                            ▼        │
+│                               ┌────────────────────┐│
+│                               │ SQLite + Ollama    ││
+│                               │ .engram/memory.db  ││
+│                               └────────────────────┘│
+└─────────────────────────────────────────────────────┘
+```
+
+### Installation Options
+
+#### Option 1: Docker (Recommended)
 
 ```bash
-# 1. Create the holy network
-docker network create engram-network
+curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install.sh | bash
+```
 
-# 2. Awaken the Ollama spirit
-docker run -d --name engram-ollama \
-  --network engram-network \
-  -v ollama_data:/root/.ollama \
-  ollama/ollama:latest
+This installs:
 
-# 3. Download the embedding model (the nomic rites)
-docker exec engram-ollama ollama pull nomic-embed-text
+- Ollama container for local embeddings
+- EC server container
+- MCP configuration for your client
+- Session hooks and skills
 
-# 4. Construct the cogitator (patience, Tech-Priest)
-docker build -t engram-cogitator:local .
+#### Option 2: Binary + Local Ollama
 
-# 5. Anoint the MCP configuration
+If you already have Ollama running locally:
+
+```bash
+# Download binary
+VERSION=$(curl -s https://api.github.com/repos/MereWhiplash/engram-cogitator/releases/latest | grep tag_name | cut -d '"' -f 4)
+curl -sSL "https://github.com/MereWhiplash/engram-cogitator/releases/download/${VERSION}/ec-server_${VERSION#v}_$(uname -s | tr '[:upper:]' '[:lower:]')_amd64.tar.gz" | tar -xz
+
+# Run with local Ollama
+./ec-server --db-path .engram/memory.db --ollama-url http://localhost:11434
+```
+
+### MCP Client Configuration
+
+The install script auto-configures Claude Code. For other clients, add this to your MCP config:
+
+<details>
+<summary><strong>Claude Code</strong></summary>
+
+Auto-configured by install script, or manually:
+
+```bash
 claude mcp add --transport stdio engram-cogitator \
   --scope project \
   -- docker run -i --rm \
   --network engram-network \
-  -v "$(pwd)/.claude:/data" \
-  engram-cogitator:local \
+  -v "$(pwd)/.engram:/data" \
+  ghcr.io/merewhiplash/engram-cogitator:latest \
   --db-path /data/memory.db \
   --ollama-url http://engram-ollama:11434
-
-# 6. Restart Claude Code (the machine must be reborn)
 ```
 
-## Troubleshooting (Appeasing the Machine Spirit)
+</details>
 
-### "readonly database" error
+<details>
+<summary><strong>Cursor</strong> (~/.cursor/mcp.json)</summary>
 
-The data-shrine lacks proper permissions. The Machine Spirit is having a mare:
-
-```bash
-chmod 777 .claude
-rm .claude/memory.db  # Let the cogitator rebuild its engrams
+```json
+{
+  "mcpServers": {
+    "engram-cogitator": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--network",
+        "engram-network",
+        "-v",
+        "${workspaceFolder}/.engram:/data",
+        "ghcr.io/merewhiplash/engram-cogitator:latest",
+        "--db-path",
+        "/data/memory.db",
+        "--ollama-url",
+        "http://engram-ollama:11434"
+      ]
+    }
+  }
+}
 ```
 
-### "Dimension mismatch" error
+</details>
 
-The embedding vectors are misaligned. Like trying to fit a Dreadnought through a hobbit door. Purge and reconstruct:
+<details>
+<summary><strong>Cline</strong> (VS Code settings)</summary>
 
-```bash
-rm .claude/memory.db
+Go to VS Code Settings → Extensions → Cline → MCP Servers, add:
+
+```json
+{
+  "engram-cogitator": {
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "--network",
+      "engram-network",
+      "-v",
+      "${workspaceFolder}/.engram:/data",
+      "ghcr.io/merewhiplash/engram-cogitator:latest",
+      "--db-path",
+      "/data/memory.db",
+      "--ollama-url",
+      "http://engram-ollama:11434"
+    ]
+  }
+}
 ```
 
-### MCP server not showing up
+</details>
 
-The config must reside in `.mcp.json` (project root), not `.claude/mcp.json`. It's not hiding, you're just looking in the wrong place like your keys:
+<details>
+<summary><strong>Windsurf</strong> (~/.codeium/windsurf/mcp_config.json)</summary>
 
-```bash
-claude mcp list  # Should reveal engram-cogitator
+```json
+{
+  "mcpServers": {
+    "engram-cogitator": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--network",
+        "engram-network",
+        "-v",
+        "${workspaceFolder}/.engram:/data",
+        "ghcr.io/merewhiplash/engram-cogitator:latest",
+        "--db-path",
+        "/data/memory.db",
+        "--ollama-url",
+        "http://engram-ollama:11434"
+      ]
+    }
+  }
+}
 ```
 
-### Alpine build failures
+</details>
 
-EC requires Debian-based images. Ensure your Dockerfile uses `golang:1.23-bookworm`. Alpine is heresy. The Omnissiah has spoken.
+### AI Assistant Instructions
 
-### Still not working?
+For your AI assistant to understand how to use Engram Cogitator, add the contents of [`INSTRUCTIONS.md`](INSTRUCTIONS.md) to your project's instruction file:
 
-Have you tried turning it off and on again? Seriously though, restart Claude Code. Works 60% of the time, every time.
+| AI Assistant | Instruction File |
+|--------------|------------------|
+| Claude Code | `CLAUDE.md` |
+| Cursor | `.cursor/rules/engram.mdc` |
+| GitHub Copilot | `.github/copilot-instructions.md` |
+| Gemini | `GEMINI.md` |
+| Generic | `AGENTS.md` |
 
-## Development
-
-```bash
-# Run the sacred tests
-CGO_ENABLED=1 go test ./...
-
-# Forge the cogitator locally
-docker build -t engram-cogitator:local .
-```
+The install script automatically sets up `CLAUDE.md` and downloads `INSTRUCTIONS.md` to `.engram/` for other assistants.
 
 ---
 
-## Team Mode (Beta)
+## Team Mode
 
-Deploy Engram Cogitator for your engineering team. Memories are shared and searchable across all team members and repositories.
+Share memories across your engineering team. When Alice discovers a gotcha in the payment API, Bob finds it when he searches a week later.
+
+### Architecture
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Developer A    │     │  Developer B    │     │  Developer C    │
+│  (frontend)     │     │  (backend)      │     │  (mobile)       │
+│  ┌───────────┐  │     │  ┌───────────┐  │     │  ┌───────────┐  │
+│  │ Claude/   │  │     │  │ Cursor    │  │     │  │ Cline     │  │
+│  │ Cursor    │  │     │  │           │  │     │  │           │  │
+│  └─────┬─────┘  │     │  └─────┬─────┘  │     │  └─────┬─────┘  │
+│        │        │     │        │        │     │        │        │
+│  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │
+│  │ ec-shim   │  │     │  │ ec-shim   │  │     │  │ ec-shim   │  │
+│  └─────┬─────┘  │     │  └─────┬─────┘  │     │  └─────┬─────┘  │
+└────────┼────────┘     └────────┼────────┘     └────────┼────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │ HTTPS
+                                 ▼
+                    ┌────────────────────────┐
+                    │   Kubernetes Cluster   │
+                    │  ┌──────────────────┐  │
+                    │  │    EC API        │  │
+                    │  │   (replicas: 3)  │  │
+                    │  └────────┬─────────┘  │
+                    │           │            │
+                    │  ┌────────▼─────────┐  │
+                    │  │ Postgres/MongoDB │  │
+                    │  │ + Ollama         │  │
+                    │  └──────────────────┘  │
+                    └────────────────────────┘
+```
 
 ### Quick Start (Team)
 
 **1. Deploy to Kubernetes:**
 
 ```bash
-# Add Helm repo
 helm repo add engram https://merewhiplash.github.io/engram-cogitator
 helm repo update
 
-# Install with Postgres
 helm install engram engram/engram-cogitator \
   --namespace engram \
   --create-namespace \
-  --set storage.postgres.password=<your-password>
-
-# Or with MongoDB Atlas
-helm install engram engram/engram-cogitator \
-  --namespace engram \
-  --create-namespace \
-  --set storage.driver=mongodb \
-  --set storage.mongodb.uri="mongodb+srv://user:pass@cluster.mongodb.net"
+  --set storage.postgres.password=<your-password> \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=engram.yourcompany.com
 ```
 
 **2. Install shim on developer machines:**
@@ -157,30 +293,21 @@ EC_API_URL=https://engram.yourcompany.com \
   curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install-team.sh | bash
 ```
 
-**3. Restart Claude Code**
+**3. Restart your AI coding assistant**
 
-### How It Works
+### How The Shim Works
 
-```
-Developer A (repo-frontend)     Developer B (repo-backend)
-         |                              |
-    [ec-shim]                      [ec-shim]
-         |                              |
-         +--------- HTTPS -------------+
-                     |
-              [Central API]
-                     |
-         [Postgres/MongoDB + Ollama]
-```
+The shim is a lightweight MCP proxy that:
 
-Each developer's shim:
-- Extracts git author from local config
-- Extracts repo from `git remote origin`
-- Forwards all requests to central API with context
+1. Extracts your git identity (`git config user.name/email`)
+2. Extracts the repo from `git remote origin`
+3. Forwards requests to the central API with attribution
 
-### Search Behavior
+Every memory is tagged with who added it and from which repo.
 
-By default, `ec_search` searches **all repositories** (cross-pollination). Results show who added each memory and which repo it came from:
+### Cross-Repo Search
+
+By default, searches find memories from **all repositories**:
 
 ```json
 {
@@ -192,57 +319,146 @@ By default, `ec_search` searches **all repositories** (cross-pollination). Resul
 }
 ```
 
-### Helm Values
+### Helm Configuration
 
-Key configuration options:
+Key options (see [values.yaml](charts/engram-cogitator/values.yaml) for all):
 
 ```yaml
-# Storage backend
 storage:
-  driver: postgres  # or mongodb
-
+  driver: postgres # or mongodb
   postgres:
-    internal: true    # Deploy StatefulSet
-    # OR
-    internal: false   # External Postgres
-    host: postgres.example.com
+    internal: true # deploy StatefulSet, or false for external
     password: <secret>
 
-  mongodb:
-    uri: mongodb+srv://...
-    database: engram
-
-# Scaling
 api:
   replicas: 3
+
 autoscaling:
   enabled: true
   maxReplicas: 10
 
-# Ingress
 ingress:
   enabled: true
   hosts:
     - host: engram.yourcompany.com
 ```
 
-See [values.yaml](charts/engram-cogitator/values.yaml) for all options.
+---
 
-### Architecture
+## MCP Tools Reference
 
-| Component | Purpose |
-|-----------|---------|
-| API Server | HTTP API handling memory operations |
-| Ollama | Local embedding generation (nomic-embed-text) |
-| Postgres/MongoDB | Persistent storage with vector search |
-| Shim | MCP bridge on developer machines |
+| Tool            | Purpose                 | Example                                         |
+| --------------- | ----------------------- | ----------------------------------------------- |
+| `ec_add`        | Store a memory          | "Remember that we use UUIDs for all entity IDs" |
+| `ec_search`     | Find relevant memories  | "How do we handle authentication?"              |
+| `ec_list`       | Show recent memories    | "What did we decide recently?"                  |
+| `ec_invalidate` | Mark memory as outdated | "That decision about Redux is no longer valid"  |
 
-### Data Model (Team)
+### Memory Types
 
-Memories include attribution:
-- `author_name` / `author_email` - Who added it
-- `repo` - Which repository (org/repo format)
-- All existing fields (type, area, content, rationale)
+| Type       | When to Use                                       |
+| ---------- | ------------------------------------------------- |
+| `decision` | Architectural choices, tech selections, tradeoffs |
+| `learning` | Debugging insights, gotchas, "TIL" moments        |
+| `pattern`  | Recurring solutions, conventions, best practices  |
+
+---
+
+## Usage Examples
+
+The AI assistant uses these tools automatically when relevant. You can also prompt it directly:
+
+**Storing decisions:**
+
+> "Remember that we chose Postgres over MongoDB because we need strong consistency for financial transactions"
+
+**Finding context:**
+
+> "Search memories for how we handle rate limiting"
+
+**Reviewing recent work:**
+
+> "List the last 10 memories from this project"
+
+**Updating outdated info:**
+
+> "Invalidate the memory about using REST - we switched to GraphQL"
+
+### Session Hooks (Claude Code)
+
+The install script adds a session-start hook that automatically searches for relevant memories when you start working. Your AI assistant gets context like:
+
+```
+Relevant memories for this codebase:
+- [decision/auth] Use JWT with 15-minute expiry, refresh tokens in httpOnly cookies
+- [pattern/api] All endpoints return {data, error, meta} shape
+- [learning/postgres] Connection pooling maxes at 20 for this instance size
+```
+
+---
+
+## Troubleshooting
+
+### "readonly database" error
+
+```bash
+chmod 777 .engram
+rm .engram/memory.db  # Let it rebuild
+```
+
+### "Dimension mismatch" error
+
+Embedding model changed. Reset the database:
+
+```bash
+rm .engram/memory.db
+```
+
+### MCP server not showing up
+
+```bash
+claude mcp list  # Should show engram-cogitator
+```
+
+Config lives in `.mcp.json` (project root).
+
+### Docker network issues
+
+```bash
+docker network create engram-network
+docker start engram-ollama
+```
+
+### Still broken?
+
+Restart your AI coding assistant. Works 60% of the time, every time.
+
+---
+
+## Development
+
+```bash
+# Run tests
+CGO_ENABLED=1 go test ./...
+
+# Build locally
+CGO_ENABLED=1 go build -o ec-server ./cmd/server
+CGO_ENABLED=0 go build -o ec-api ./cmd/api
+CGO_ENABLED=0 go build -o ec-shim ./cmd/shim
+
+# Build Docker image
+docker build -t engram-cogitator:local .
+
+# Lint
+golangci-lint run ./...
+```
+
+### Pre-commit Hooks
+
+```bash
+pip install pre-commit
+pre-commit install
+```
 
 ---
 

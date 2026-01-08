@@ -5,9 +5,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/MereWhiplash/engram-cogitator/internal/storage"
 	"github.com/MereWhiplash/engram-cogitator/internal/types"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // cleanupPostgres removes all test data before each test

@@ -9,18 +9,22 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/MereWhiplash/engram-cogitator/internal/embedder"
 	"github.com/MereWhiplash/engram-cogitator/internal/service"
 	"github.com/MereWhiplash/engram-cogitator/internal/storage"
 	"github.com/MereWhiplash/engram-cogitator/internal/tools"
 	"github.com/MereWhiplash/engram-cogitator/internal/types"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// version is set by goreleaser via ldflags
+var version = "dev"
 
 func main() {
 	// Storage flags
 	storageDriver := flag.String("storage-driver", "sqlite", "Storage driver: sqlite, postgres, mongodb")
-	dbPath := flag.String("db-path", "/data/memory.db", "Path to SQLite database (sqlite driver)")
+	dbPath := flag.String("db-path", ".engram/memory.db", "Path to SQLite database (sqlite driver)")
 	postgresDSN := flag.String("postgres-dsn", "", "PostgreSQL connection string (postgres driver)")
 	mongoURI := flag.String("mongodb-uri", "", "MongoDB connection URI (mongodb driver)")
 	mongoDatabase := flag.String("mongodb-database", "engram", "MongoDB database name (mongodb driver)")
@@ -32,8 +36,14 @@ func main() {
 	// CLI mode flags
 	listFlag := flag.Bool("list", false, "List recent memories (CLI mode)")
 	limitFlag := flag.Int("limit", 5, "Limit for list operation")
+	versionFlag := flag.Bool("version", false, "Print version and exit")
 
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("ec-server %s\n", version)
+		return
+	}
 
 	ctx := context.Background()
 
@@ -71,7 +81,7 @@ func main() {
 	// Create MCP server
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "engram-cogitator",
-		Version: "1.0.0",
+		Version: version,
 	}, nil)
 
 	// Register tools

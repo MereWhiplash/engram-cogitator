@@ -6,10 +6,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 )
 
 // MongoDB implements Storage using MongoDB with Atlas Vector Search

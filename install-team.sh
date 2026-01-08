@@ -37,10 +37,46 @@ esac
 
 echo "Detected: $OS/$ARCH"
 
-# Download shim
-VERSION=$(curl -s https://api.github.com/repos/MereWhiplash/engram-cogitator/releases/latest | grep tag_name | cut -d '"' -f 4)
+# Fetch latest version from GitHub API
+# Uses GITHUB_TOKEN if available to avoid rate limits (60/hr anonymous, 5000/hr authenticated)
+fetch_version() {
+    local auth_header=""
+    if [ -n "$GITHUB_TOKEN" ]; then
+        auth_header="-H \"Authorization: token $GITHUB_TOKEN\""
+    fi
+
+    local response
+    response=$(eval curl -s $auth_header https://api.github.com/repos/MereWhiplash/engram-cogitator/releases/latest)
+
+    # Check for rate limit error
+    if echo "$response" | grep -q "API rate limit exceeded"; then
+        echo -e "${RED}Error: GitHub API rate limit exceeded${NC}"
+        echo ""
+        echo "Solutions:"
+        echo "  1. Wait an hour for the rate limit to reset"
+        echo "  2. Set GITHUB_TOKEN environment variable for higher limits:"
+        echo "     GITHUB_TOKEN=ghp_xxx EC_API_URL=https://... ./install-team.sh"
+        echo "  3. Specify version manually: EC_VERSION=v1.0.0 EC_API_URL=https://... ./install-team.sh"
+        exit 1
+    fi
+
+    echo "$response" | grep tag_name | cut -d '"' -f 4
+}
+
+# Allow manual version override
+if [ -n "$EC_VERSION" ]; then
+    VERSION="$EC_VERSION"
+    echo "Using specified version: $VERSION"
+else
+    echo "Fetching latest version..."
+    VERSION=$(fetch_version)
+fi
+
 if [ -z "$VERSION" ]; then
     echo -e "${RED}Error: Could not determine latest version${NC}"
+    echo ""
+    echo "This may be due to GitHub API rate limiting or no releases available."
+    echo "Try setting EC_VERSION manually: EC_VERSION=v1.0.0 ./install-team.sh"
     exit 1
 fi
 
@@ -118,6 +154,24 @@ echo -e "${YELLOW}Common config file locations:${NC}"
 echo "  Cursor:   ~/.cursor/mcp.json"
 echo "  Cline:    VS Code settings > Extensions > Cline > MCP Servers"
 echo "  Windsurf: ~/.codeium/windsurf/mcp_config.json"
+echo ""
+
+# ============================================================
+# AI Assistant Instructions
+# ============================================================
+
+echo -e "${CYAN}=== AI Assistant Instructions ===${NC}"
+echo ""
+echo "Add the following to your AI assistant's instruction file:"
+echo ""
+echo "  Claude Code:    CLAUDE.md"
+echo "  Cursor:         .cursor/rules/engram.mdc"
+echo "  GitHub Copilot: .github/copilot-instructions.md"
+echo "  Gemini:         GEMINI.md"
+echo "  Generic:        AGENTS.md"
+echo ""
+echo "Instructions content:"
+echo "  https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/INSTRUCTIONS.md"
 echo ""
 
 # ============================================================

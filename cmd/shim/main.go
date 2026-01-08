@@ -4,20 +4,31 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/MereWhiplash/engram-cogitator/internal/client"
 	"github.com/MereWhiplash/engram-cogitator/internal/gitinfo"
 	"github.com/MereWhiplash/engram-cogitator/internal/shim"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// version is set by goreleaser via ldflags
+var version = "dev"
 
 func main() {
 	apiURL := flag.String("api-url", "", "Central API URL (required)")
+	versionFlag := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("ec-shim %s\n", version)
+		return
+	}
 
 	// Check for env var if flag not set
 	if *apiURL == "" {
@@ -44,7 +55,7 @@ func main() {
 	// Create MCP server
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "engram-cogitator",
-		Version: "1.0.0",
+		Version: version,
 	}, nil)
 
 	// Register tools

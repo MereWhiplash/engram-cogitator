@@ -6,7 +6,7 @@ services:
     container_name: engram-cogitator
     stdin_open: true
     volumes:
-      - ${EC_DATA_PATH:-./.claude}:/data
+      - ${EC_DATA_PATH:-./.engram}:/data
     environment:
       - OLLAMA_URL=http://ollama:11434
       - EMBEDDING_MODEL=${EC_EMBEDDING_MODEL:-nomic-embed-text}

@@ -21,3 +21,6 @@ tui
 # Local MCP config
 .mcp.json
 docs/plans/
+
+# Engram Cogitator local memory
+.engram/memory.db
