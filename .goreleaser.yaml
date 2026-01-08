@@ -1,0 +1,96 @@
+# .goreleaser.yaml
+version: 2
+
+project_name: engram-cogitator
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # Solo mode MCP server (CGO required for SQLite)
+  - id: server
+    main: ./cmd/server
+    binary: ec-server
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    # NOTE: linux/arm64 excluded because CGO cross-compilation requires
+    # native ARM64 runners or complex toolchain setup. Users on ARM64 Linux
+    # should build from source: CGO_ENABLED=1 go build ./cmd/server
+    ignore:
+      - goos: linux
+        goarch: arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+  # API server (no CGO)
+  - id: api
+    main: ./cmd/api
+    binary: ec-api
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+  # Shim (no CGO)
+  - id: shim
+    main: ./cmd/shim
+    binary: ec-shim
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: server
+    builds:
+      - server
+    name_template: "ec-server_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+  - id: shim
+    builds:
+      - shim
+    name_template: "ec-shim_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+release:
+  github:
+    owner: MereWhiplash
+    name: engram-cogitator
+  prerelease: auto
+  draft: false

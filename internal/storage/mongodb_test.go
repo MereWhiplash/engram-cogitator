@@ -5,11 +5,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/MereWhiplash/engram-cogitator/internal/storage"
-	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/MereWhiplash/engram-cogitator/internal/storage"
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 )
 
 // cleanupMongoDB removes all test data before each test

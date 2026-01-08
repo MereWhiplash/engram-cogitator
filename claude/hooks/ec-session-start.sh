@@ -22,14 +22,14 @@ fi
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 
 # Check if memory.db exists
-if [ ! -f "$PROJECT_DIR/.claude/memory.db" ]; then
+if [ ! -f "$PROJECT_DIR/.engram/memory.db" ]; then
     exit 0
 fi
 
 # Get recent memories via CLI mode
 MEMORIES=$(docker run -i --rm \
     --network engram-network \
-    -v "$PROJECT_DIR/.claude:/data" \
+    -v "$PROJECT_DIR/.engram:/data" \
     "$EC_IMAGE" \
     --db-path /data/memory.db \
     --list --limit 5 2>/dev/null)

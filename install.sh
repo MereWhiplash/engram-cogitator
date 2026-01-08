@@ -5,81 +5,20 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Team mode installation
-install_team_mode() {
-    echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║  Engram Cogitator - Team Mode Install     ║${NC}"
-    echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
-    echo ""
-
-    if [ -z "$EC_API_URL" ]; then
-        echo -e "${RED}Error: EC_API_URL environment variable required for team mode${NC}"
-        echo "Usage: EC_API_URL=https://engram.company.com ./install.sh --team"
-        exit 1
-    fi
-
-    # Check for Claude Code CLI
-    if ! command -v claude &> /dev/null; then
-        echo -e "${RED}Error: Claude Code CLI is not installed.${NC}"
-        echo "Please install Claude Code first: https://docs.anthropic.com/en/docs/claude-code"
-        exit 1
-    fi
-
-    # Determine OS and architecture
-    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-    ARCH=$(uname -m)
-    case $ARCH in
-        x86_64) ARCH="amd64" ;;
-        aarch64|arm64) ARCH="arm64" ;;
-    esac
-
-    # Download shim binary
-    echo -e "${YELLOW}Downloading shim binary...${NC}"
-    SHIM_URL="https://github.com/MereWhiplash/engram-cogitator/releases/latest/download/ec-shim-${OS}-${ARCH}"
-    SHIM_PATH="${HOME}/.local/bin/ec-shim"
-    mkdir -p "$(dirname "$SHIM_PATH")"
-
-    if curl -sSL "$SHIM_URL" -o "$SHIM_PATH" 2>/dev/null; then
-        chmod +x "$SHIM_PATH"
-    else
-        echo -e "${RED}Error: Failed to download shim binary.${NC}"
-        echo "You may need to build from source: go build ./cmd/shim"
-        exit 1
-    fi
-
-    # Check if ~/.local/bin is in PATH
-    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-        echo -e "${YELLOW}Warning: ${HOME}/.local/bin is not in your PATH.${NC}"
-        echo "Add it to your shell profile: export PATH=\"\$HOME/.local/bin:\$PATH\""
-    fi
-
-    # Remove existing config if present
-    claude mcp remove engram-cogitator 2>/dev/null || true
-
-    # Configure MCP with shim
-    echo -e "${YELLOW}Configuring MCP server (team mode)...${NC}"
-    claude mcp add engram-cogitator \
-        --scope user \
-        -- "$SHIM_PATH" --api-url "$EC_API_URL"
-
-    echo ""
-    echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║     Team Mode Installation Complete!      ║${NC}"
-    echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
-    echo ""
-    echo "Shim installed to: $SHIM_PATH"
-    echo "API URL: $EC_API_URL"
-    echo ""
-    echo -e "${YELLOW}Restart Claude Code to activate.${NC}"
-    echo ""
-}
-
-# Check for team mode flag
+# Check for team mode flag - delegate to install-team.sh
 if [ "$1" = "--team" ]; then
-    install_team_mode
-    exit 0
+    # If install-team.sh exists locally, use it
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$SCRIPT_DIR/install-team.sh" ]; then
+        exec "$SCRIPT_DIR/install-team.sh"
+    else
+        # Otherwise, download and run from GitHub
+        echo -e "${YELLOW}Downloading team mode installer...${NC}"
+        exec bash <(curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install-team.sh)
+    fi
 fi
 
 EC_VERSION="latest"
@@ -106,32 +45,25 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
-# Check for Claude Code CLI
-if ! command -v claude &> /dev/null; then
-    echo -e "${RED}Error: Claude Code CLI is not installed.${NC}"
-    echo "Please install Claude Code first: https://docs.anthropic.com/en/docs/claude-code"
-    exit 1
-fi
-
-# Create .claude directory if it doesn't exist
-if [ ! -d ".claude" ]; then
-    echo -e "${YELLOW}Creating .claude directory...${NC}"
-    mkdir -p .claude
-    chmod 777 .claude
+# Create .engram directory if it doesn't exist
+if [ ! -d ".engram" ]; then
+    echo -e "${YELLOW}Creating .engram directory...${NC}"
+    mkdir -p .engram
+    chmod 777 .engram
 fi
 
 # Add memory.db to .gitignore if not already there
 if [ -f ".gitignore" ]; then
-    if ! grep -q "\.claude/memory\.db" .gitignore; then
+    if ! grep -q "\.engram/memory\.db" .gitignore; then
         echo -e "${YELLOW}Adding memory.db to .gitignore...${NC}"
         echo "" >> .gitignore
         echo "# Engram Cogitator local memory" >> .gitignore
-        echo ".claude/memory.db" >> .gitignore
+        echo ".engram/memory.db" >> .gitignore
     fi
 else
     echo -e "${YELLOW}Creating .gitignore with memory.db...${NC}"
     echo "# Engram Cogitator local memory" > .gitignore
-    echo ".claude/memory.db" >> .gitignore
+    echo ".engram/memory.db" >> .gitignore
 fi
 
 # Pull images
@@ -145,22 +77,63 @@ docker pull ${EC_IMAGE} 2>/dev/null || {
 }
 
 # Configure MCP server
-echo -e "${YELLOW}Configuring MCP server...${NC}"
+echo ""
+echo -e "${CYAN}=== MCP Configuration ===${NC}"
+echo ""
 
-# Remove existing config if present
-claude mcp remove engram-cogitator 2>/dev/null || true
+# Build the docker command
+DOCKER_CMD="docker run -i --rm --network engram-network -v \"\$(pwd)/.engram:/data\" ${EC_IMAGE} --db-path /data/memory.db --ollama-url http://engram-ollama:11434"
 
-# Add MCP server using CLI
-claude mcp add --transport stdio engram-cogitator \
-  --scope project \
-  -- docker run -i --rm \
-  --network engram-network \
-  -v "$(pwd)/.claude:/data" \
-  "${EC_IMAGE}" \
-  --db-path /data/memory.db \
-  --ollama-url http://engram-ollama:11434
+# Check for Claude Code CLI
+if command -v claude &> /dev/null; then
+    echo "Claude Code CLI detected."
+    read -p "Configure Claude Code automatically? [Y/n] " -n 1 -r
+    echo ""
 
-echo -e "${GREEN}MCP configuration added to .mcp.json${NC}"
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        claude mcp remove engram-cogitator 2>/dev/null || true
+        claude mcp add --transport stdio engram-cogitator \
+          --scope project \
+          -- docker run -i --rm \
+          --network engram-network \
+          -v "$(pwd)/.engram:/data" \
+          "${EC_IMAGE}" \
+          --db-path /data/memory.db \
+          --ollama-url http://engram-ollama:11434
+        echo -e "${GREEN}Claude Code configured! (.mcp.json created)${NC}"
+    fi
+    echo ""
+fi
+
+# Always output generic MCP config
+echo -e "${CYAN}For other MCP clients (Cursor, Cline, Windsurf, etc.):${NC}"
+echo ""
+echo "Add this to your MCP configuration file:"
+echo ""
+cat << EOF
+{
+  "mcpServers": {
+    "engram-cogitator": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "--network", "engram-network",
+        "-v", "$(pwd)/.engram:/data",
+        "${EC_IMAGE}",
+        "--db-path", "/data/memory.db",
+        "--ollama-url", "http://engram-ollama:11434"
+      ]
+    }
+  }
+}
+EOF
+
+echo ""
+echo -e "${YELLOW}Common config file locations:${NC}"
+echo "  Cursor:   ~/.cursor/mcp.json"
+echo "  Cline:    VS Code settings > Extensions > Cline > MCP Servers"
+echo "  Windsurf: ~/.codeium/windsurf/mcp_config.json"
+echo ""
 
 # Base URL for raw files
 EC_RAW_URL="https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main"
@@ -199,6 +172,22 @@ else
     curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" > CLAUDE.md
 fi
 
+# Download generic instructions for other AI assistants
+echo -e "${YELLOW}Downloading AI assistant instructions...${NC}"
+curl -sSL "${EC_RAW_URL}/INSTRUCTIONS.md" -o .engram/INSTRUCTIONS.md
+
+echo ""
+echo -e "${CYAN}=== AI Assistant Instructions ===${NC}"
+echo ""
+echo "For AI assistants other than Claude Code, add the contents of"
+echo ".engram/INSTRUCTIONS.md to your project's instruction file:"
+echo ""
+echo "  Cursor:        .cursor/rules/engram.mdc"
+echo "  GitHub Copilot: .github/copilot-instructions.md"
+echo "  Gemini:        GEMINI.md"
+echo "  Generic:       AGENTS.md"
+echo ""
+
 # Create Docker network if it doesn't exist
 if ! docker network inspect engram-network &> /dev/null; then
     echo -e "${YELLOW}Creating Docker network...${NC}"
@@ -230,17 +219,17 @@ echo ""
 echo "Engram Cogitator is now configured for this project."
 echo ""
 echo "What's installed:"
-echo "  - MCP server config in .mcp.json"
+echo "  - Docker containers (Ollama + EC)"
 echo "  - ec:remember skill in .claude/skills/"
 echo "  - Session-start hook in .claude/hooks/"
 echo "  - EC section added to CLAUDE.md"
 echo ""
 echo "MCP tools available:"
-echo "  - ec_add       : Store a memory"
-echo "  - ec_search    : Find relevant memories"
-echo "  - ec_list      : List recent memories"
-echo "  - ec_invalidate: Soft-delete a memory"
+echo "  - ec_add        : Store a memory"
+echo "  - ec_search     : Find relevant memories"
+echo "  - ec_list       : List recent memories"
+echo "  - ec_invalidate : Soft-delete a memory"
 echo ""
-echo -e "${YELLOW}Restart Claude Code to activate.${NC}"
+echo -e "${YELLOW}Restart your AI coding assistant to activate.${NC}"
 echo "To start Ollama: docker start engram-ollama"
 echo ""

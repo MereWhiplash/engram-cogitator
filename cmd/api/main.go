@@ -13,14 +13,18 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/MereWhiplash/engram-cogitator/internal/api"
 	"github.com/MereWhiplash/engram-cogitator/internal/embedder"
 	"github.com/MereWhiplash/engram-cogitator/internal/service"
 	"github.com/MereWhiplash/engram-cogitator/internal/storage"
 	"github.com/MereWhiplash/engram-cogitator/internal/types"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
+
+// version is set by goreleaser via ldflags
+var version = "dev"
 
 func main() {
 	// Server flags
@@ -45,7 +49,15 @@ func main() {
 	// CORS flags
 	corsOrigins := flag.String("cors-origins", "", "Comma-separated list of allowed CORS origins (empty to disable)")
 
+	// Version flag
+	versionFlag := flag.Bool("version", false, "Print version and exit")
+
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("ec-api %s\n", version)
+		return
+	}
 
 	ctx := context.Background()
 

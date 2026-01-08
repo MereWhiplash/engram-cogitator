@@ -1,3 +1,5 @@
+//go:build cgo
+
 package storage
 
 import (
@@ -7,9 +9,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	_ "github.com/mattn/go-sqlite3"
+
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 )
 
 // SQLite implements Storage using SQLite with sqlite-vec

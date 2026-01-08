@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go"
+
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 )
 
 // Postgres implements Storage using PostgreSQL with pgvector

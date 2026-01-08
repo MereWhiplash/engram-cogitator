@@ -9,10 +9,11 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/MereWhiplash/engram-cogitator/internal/apitypes"
 	"github.com/MereWhiplash/engram-cogitator/internal/service"
 	"github.com/MereWhiplash/engram-cogitator/internal/types"
-	"github.com/go-chi/chi/v5"
 )
 
 // Handlers holds HTTP handler dependencies
