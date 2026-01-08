@@ -1,0 +1,30 @@
+# .golangci.yml
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags:
+    - cgo
+
+linters:
+  disable:
+    - errcheck
+  enable:
+    - misspell
+    - unconvert
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/MereWhiplash/engram-cogitator
+
+issues:
+  exclude-rules:
+    - path: sqlite_nocgo\.go
+      linters:
+        - unused

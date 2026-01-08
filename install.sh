@@ -8,122 +8,17 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Team mode installation
-install_team_mode() {
-    echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║  Engram Cogitator - Team Mode Install     ║${NC}"
-    echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
-    echo ""
-
-    if [ -z "$EC_API_URL" ]; then
-        echo -e "${RED}Error: EC_API_URL environment variable required for team mode${NC}"
-        echo "Usage: EC_API_URL=https://engram.company.com ./install.sh --team"
-        exit 1
-    fi
-
-    # Determine OS and architecture
-    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-    ARCH=$(uname -m)
-    case $ARCH in
-        x86_64) ARCH="amd64" ;;
-        aarch64|arm64) ARCH="arm64" ;;
-        *) echo -e "${RED}Unsupported architecture: $ARCH${NC}"; exit 1 ;;
-    esac
-
-    # Download shim binary
-    echo -e "${YELLOW}Downloading shim binary...${NC}"
-    VERSION=$(curl -s https://api.github.com/repos/MereWhiplash/engram-cogitator/releases/latest | grep tag_name | cut -d '"' -f 4)
-    if [ -z "$VERSION" ]; then
-        echo -e "${RED}Error: Could not determine latest version${NC}"
-        exit 1
-    fi
-
-    DOWNLOAD_URL="https://github.com/MereWhiplash/engram-cogitator/releases/download/${VERSION}/ec-shim_${VERSION#v}_${OS}_${ARCH}.tar.gz"
-    SHIM_PATH="${HOME}/.local/bin/ec-shim"
-    mkdir -p "$(dirname "$SHIM_PATH")"
-
-    TEMP_DIR=$(mktemp -d)
-    if curl -sSL "$DOWNLOAD_URL" | tar -xz -C "$TEMP_DIR"; then
-        mv "$TEMP_DIR/ec-shim" "$SHIM_PATH"
-        chmod +x "$SHIM_PATH"
-        rm -rf "$TEMP_DIR"
-    else
-        echo -e "${RED}Error: Failed to download shim binary.${NC}"
-        echo "You may need to build from source: go build ./cmd/shim"
-        rm -rf "$TEMP_DIR"
-        exit 1
-    fi
-
-    # Check if ~/.local/bin is in PATH
-    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-        echo -e "${YELLOW}Warning: ${HOME}/.local/bin is not in your PATH.${NC}"
-        echo "Add it to your shell profile: export PATH=\"\$HOME/.local/bin:\$PATH\""
-    fi
-
-    echo ""
-    echo -e "${CYAN}=== MCP Configuration ===${NC}"
-    echo ""
-
-    # Check for Claude Code CLI
-    if command -v claude &> /dev/null; then
-        echo "Claude Code CLI detected."
-        read -p "Configure Claude Code automatically? [Y/n] " -n 1 -r
-        echo ""
-
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            claude mcp remove engram-cogitator 2>/dev/null || true
-            claude mcp add engram-cogitator \
-                --scope user \
-                -- "$SHIM_PATH" --api-url "$EC_API_URL"
-            echo -e "${GREEN}Claude Code configured!${NC}"
-        fi
-        echo ""
-    fi
-
-    # Always output generic MCP config
-    echo -e "${CYAN}For other MCP clients (Cursor, Cline, Windsurf, etc.):${NC}"
-    echo ""
-    echo "Add this to your MCP configuration file:"
-    echo ""
-    cat << EOF
-{
-  "mcpServers": {
-    "engram-cogitator": {
-      "command": "$SHIM_PATH",
-      "args": ["--api-url", "$EC_API_URL"]
-    }
-  }
-}
-EOF
-
-    echo ""
-    echo -e "${YELLOW}Common config file locations:${NC}"
-    echo "  Cursor:   ~/.cursor/mcp.json"
-    echo "  Cline:    VS Code settings > Extensions > Cline > MCP Servers"
-    echo "  Windsurf: ~/.codeium/windsurf/mcp_config.json"
-    echo ""
-
-    echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║     Team Mode Installation Complete!      ║${NC}"
-    echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
-    echo ""
-    echo "Shim installed to: $SHIM_PATH"
-    echo "API URL: $EC_API_URL"
-    echo ""
-    echo "Available MCP tools:"
-    echo "  - ec_add        : Add memories (decisions, learnings, patterns)"
-    echo "  - ec_search     : Search team memories semantically"
-    echo "  - ec_list       : List recent memories"
-    echo "  - ec_invalidate : Mark memories as outdated"
-    echo ""
-    echo -e "${YELLOW}Restart your AI coding assistant to activate.${NC}"
-    echo ""
-}
-
-# Check for team mode flag
+# Check for team mode flag - delegate to install-team.sh
 if [ "$1" = "--team" ]; then
-    install_team_mode
-    exit 0
+    # If install-team.sh exists locally, use it
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$SCRIPT_DIR/install-team.sh" ]; then
+        exec "$SCRIPT_DIR/install-team.sh"
+    else
+        # Otherwise, download and run from GitHub
+        echo -e "${YELLOW}Downloading team mode installer...${NC}"
+        exec bash <(curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install-team.sh)
+    fi
 fi
 
 EC_VERSION="latest"
@@ -150,25 +45,25 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
-# Create .claude directory if it doesn't exist
-if [ ! -d ".claude" ]; then
-    echo -e "${YELLOW}Creating .claude directory...${NC}"
-    mkdir -p .claude
-    chmod 777 .claude
+# Create .engram directory if it doesn't exist
+if [ ! -d ".engram" ]; then
+    echo -e "${YELLOW}Creating .engram directory...${NC}"
+    mkdir -p .engram
+    chmod 777 .engram
 fi
 
 # Add memory.db to .gitignore if not already there
 if [ -f ".gitignore" ]; then
-    if ! grep -q "\.claude/memory\.db" .gitignore; then
+    if ! grep -q "\.engram/memory\.db" .gitignore; then
         echo -e "${YELLOW}Adding memory.db to .gitignore...${NC}"
         echo "" >> .gitignore
         echo "# Engram Cogitator local memory" >> .gitignore
-        echo ".claude/memory.db" >> .gitignore
+        echo ".engram/memory.db" >> .gitignore
     fi
 else
     echo -e "${YELLOW}Creating .gitignore with memory.db...${NC}"
     echo "# Engram Cogitator local memory" > .gitignore
-    echo ".claude/memory.db" >> .gitignore
+    echo ".engram/memory.db" >> .gitignore
 fi
 
 # Pull images
@@ -187,7 +82,7 @@ echo -e "${CYAN}=== MCP Configuration ===${NC}"
 echo ""
 
 # Build the docker command
-DOCKER_CMD="docker run -i --rm --network engram-network -v \"\$(pwd)/.claude:/data\" ${EC_IMAGE} --db-path /data/memory.db --ollama-url http://engram-ollama:11434"
+DOCKER_CMD="docker run -i --rm --network engram-network -v \"\$(pwd)/.engram:/data\" ${EC_IMAGE} --db-path /data/memory.db --ollama-url http://engram-ollama:11434"
 
 # Check for Claude Code CLI
 if command -v claude &> /dev/null; then
@@ -201,7 +96,7 @@ if command -v claude &> /dev/null; then
           --scope project \
           -- docker run -i --rm \
           --network engram-network \
-          -v "$(pwd)/.claude:/data" \
+          -v "$(pwd)/.engram:/data" \
           "${EC_IMAGE}" \
           --db-path /data/memory.db \
           --ollama-url http://engram-ollama:11434
@@ -223,7 +118,7 @@ cat << EOF
       "args": [
         "run", "-i", "--rm",
         "--network", "engram-network",
-        "-v", "$(pwd)/.claude:/data",
+        "-v", "$(pwd)/.engram:/data",
         "${EC_IMAGE}",
         "--db-path", "/data/memory.db",
         "--ollama-url", "http://engram-ollama:11434"
@@ -276,6 +171,22 @@ else
     echo -e "${YELLOW}Creating CLAUDE.md with EC section...${NC}"
     curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" > CLAUDE.md
 fi
+
+# Download generic instructions for other AI assistants
+echo -e "${YELLOW}Downloading AI assistant instructions...${NC}"
+curl -sSL "${EC_RAW_URL}/INSTRUCTIONS.md" -o .engram/INSTRUCTIONS.md
+
+echo ""
+echo -e "${CYAN}=== AI Assistant Instructions ===${NC}"
+echo ""
+echo "For AI assistants other than Claude Code, add the contents of"
+echo ".engram/INSTRUCTIONS.md to your project's instruction file:"
+echo ""
+echo "  Cursor:        .cursor/rules/engram.mdc"
+echo "  GitHub Copilot: .github/copilot-instructions.md"
+echo "  Gemini:        GEMINI.md"
+echo "  Generic:       AGENTS.md"
+echo ""
 
 # Create Docker network if it doesn't exist
 if ! docker network inspect engram-network &> /dev/null; then

@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 )
 
 // APIClient defines the interface for the central API client
@@ -124,7 +125,10 @@ func (h *Handler) Add(ctx context.Context, _ *mcp.CallToolRequest, input AddInpu
 		return errorResult(fmt.Sprintf("failed to store memory: %v", err)), AddOutput{}, nil
 	}
 
-	result, _ := json.MarshalIndent(memory, "", "  ")
+	result, err := json.MarshalIndent(memory, "", "  ")
+	if err != nil {
+		return errorResult(fmt.Sprintf("failed to format response: %v", err)), AddOutput{}, nil
+	}
 	return textResult(fmt.Sprintf("Memory added successfully:\n%s", string(result))), AddOutput{Memory: memory}, nil
 }
 
@@ -147,7 +151,10 @@ func (h *Handler) Search(ctx context.Context, _ *mcp.CallToolRequest, input Sear
 		return textResult("No matching memories found."), SearchOutput{Memories: []types.Memory{}}, nil
 	}
 
-	result, _ := json.MarshalIndent(memories, "", "  ")
+	result, err := json.MarshalIndent(memories, "", "  ")
+	if err != nil {
+		return errorResult(fmt.Sprintf("failed to format response: %v", err)), SearchOutput{}, nil
+	}
 	return textResult(string(result)), SearchOutput{Memories: memories}, nil
 }
 
@@ -188,6 +195,9 @@ func (h *Handler) List(ctx context.Context, _ *mcp.CallToolRequest, input ListIn
 		return textResult("No memories found."), ListOutput{Memories: []types.Memory{}}, nil
 	}
 
-	result, _ := json.MarshalIndent(memories, "", "  ")
+	result, err := json.MarshalIndent(memories, "", "  ")
+	if err != nil {
+		return errorResult(fmt.Sprintf("failed to format response: %v", err)), ListOutput{}, nil
+	}
 	return textResult(string(result)), ListOutput{Memories: memories}, nil
 }
