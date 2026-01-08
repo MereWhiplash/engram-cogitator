@@ -23,8 +23,6 @@ formatters:
       local-prefixes:
         - github.com/MereWhiplash/engram-cogitator
 
-issues:
-  exclude-rules:
-    - path: sqlite_nocgo\.go
-      linters:
-        - unused
+exclusions:
+  paths:
+    - sqlite_nocgo\.go
