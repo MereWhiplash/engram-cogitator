@@ -9,6 +9,8 @@ before:
 
 builds:
   # Solo mode MCP server (CGO required for SQLite)
+  # Only linux/amd64 - CGO cross-compilation doesn't work for other targets
+  # Users on macOS/ARM should build from source: CGO_ENABLED=1 go build ./cmd/server
   - id: server
     main: ./cmd/server
     binary: ec-server
@@ -16,16 +18,8 @@ builds:
       - CGO_ENABLED=1
     goos:
       - linux
-      - darwin
     goarch:
       - amd64
-      - arm64
-    # NOTE: linux/arm64 excluded because CGO cross-compilation requires
-    # native ARM64 runners or complex toolchain setup. Users on ARM64 Linux
-    # should build from source: CGO_ENABLED=1 go build ./cmd/server
-    ignore:
-      - goos: linux
-        goarch: arm64
     ldflags:
       - -s -w -X main.version={{.Version}}
 
@@ -60,22 +54,18 @@ builds:
 
 archives:
   - id: server
-    builds:
+    ids:
       - server
     name_template: "ec-server_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
-    format_overrides:
-      - goos: windows
-        format: zip
+    formats:
+      - tar.gz
 
   - id: shim
-    builds:
+    ids:
       - shim
     name_template: "ec-shim_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
-    format_overrides:
-      - goos: windows
-        format: zip
+    formats:
+      - tar.gz
 
 checksum:
   name_template: 'checksums.txt'
