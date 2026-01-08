@@ -1,0 +1,25 @@
+apiVersion: v1
+entries:
+  engram-cogitator:
+  - apiVersion: v2
+    appVersion: 0.2.3
+    created: "2026-01-08T13:48:41.100005992Z"
+    description: Persistent semantic memory for Claude Code teams
+    digest: 2c0a2264ca3a0769029c2a06ea561de7ea58de156af2acb6acabf401b6f55f70
+    icon: https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/logo.jpg
+    keywords:
+    - claude
+    - mcp
+    - memory
+    - ai
+    maintainers:
+    - name: MereWhiplash
+      url: https://github.com/MereWhiplash
+    name: engram-cogitator
+    sources:
+    - https://github.com/MereWhiplash/engram-cogitator
+    type: application
+    urls:
+    - https://merewhiplash.github.io/engram-cogitator/engram-cogitator-0.2.3.tgz
+    version: 0.2.3
+generated: "2026-01-08T13:48:41.099303321Z"
