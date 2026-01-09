@@ -2,7 +2,9 @@
 package gitinfo
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -35,6 +37,28 @@ func Get() *Info {
 	}
 
 	return info
+}
+
+// GetProjectID returns a unique identifier for the current project.
+// Priority:
+// 1. Git remote origin → normalized to "org/repo"
+// 2. Working directory absolute path (for non-git projects)
+func GetProjectID() string {
+	// Try git remote first
+	if out, err := exec.Command("git", "config", "--get", "remote.origin.url").Output(); err == nil {
+		repo := NormalizeRemoteURL(strings.TrimSpace(string(out)))
+		if repo != "" {
+			return repo
+		}
+	}
+
+	// Fall back to working directory
+	if wd, err := os.Getwd(); err == nil {
+		// Clean and use absolute path
+		return filepath.Clean(wd)
+	}
+
+	return "unknown"
 }
 
 // NormalizeRemoteURL converts various git remote URL formats to "org/repo"

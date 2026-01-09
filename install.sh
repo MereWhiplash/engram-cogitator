@@ -8,18 +8,90 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Check for team mode flag - delegate to install-team.sh
-if [ "$1" = "--team" ]; then
-    # If install-team.sh exists locally, use it
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ -f "$SCRIPT_DIR/install-team.sh" ]; then
-        exec "$SCRIPT_DIR/install-team.sh"
+ENGRAM_DIR="$HOME/.engram"
+EC_RAW_URL="https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main"
+
+# Show help
+show_help() {
+    echo "Engram Cogitator Installer"
+    echo ""
+    echo "Usage: install.sh [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  (no args)   Full installation (first time setup)"
+    echo "  --init      Initialize current project only (add skills/hooks)"
+    echo "  --team      Team mode installation (Kubernetes)"
+    echo "  --help      Show this help message"
+    echo ""
+}
+
+# Initialize project (skills/hooks only)
+init_project() {
+    echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║     Engram Cogitator - Project Init       ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # Install EC skill
+    echo -e "${YELLOW}Installing EC skill...${NC}"
+    mkdir -p .claude/skills/ec-remember
+    curl -sSL "${EC_RAW_URL}/claude/skills/ec-remember/SKILL.md" \
+        -o .claude/skills/ec-remember/SKILL.md
+
+    # Install session-start hook
+    echo -e "${YELLOW}Installing session-start hook...${NC}"
+    mkdir -p .claude/hooks
+    curl -sSL "${EC_RAW_URL}/claude/hooks/ec-session-start.sh" \
+        -o .claude/hooks/ec-session-start.sh
+    chmod +x .claude/hooks/ec-session-start.sh
+
+    # Configure hooks in settings.json
+    if [ -f ".claude/settings.json" ]; then
+        echo -e "${YELLOW}Note: .claude/settings.json exists. You may need to manually merge EC hooks.${NC}"
     else
-        # Otherwise, download and run from GitHub
-        echo -e "${YELLOW}Downloading team mode installer...${NC}"
-        exec bash <(curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install-team.sh)
+        curl -sSL "${EC_RAW_URL}/claude/settings.json" \
+            -o .claude/settings.json
     fi
-fi
+
+    # Add EC section to CLAUDE.md
+    if [ -f "CLAUDE.md" ]; then
+        if ! grep -q "Engram Cogitator" CLAUDE.md; then
+            echo -e "${YELLOW}Adding EC section to CLAUDE.md...${NC}"
+            curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" >> CLAUDE.md
+        fi
+    else
+        echo -e "${YELLOW}Creating CLAUDE.md with EC section...${NC}"
+        curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" > CLAUDE.md
+    fi
+
+    echo ""
+    echo -e "${GREEN}Project initialized!${NC}"
+    echo "Added: .claude/skills/ec-remember/, .claude/hooks/ec-session-start.sh"
+    echo ""
+    echo -e "${YELLOW}Restart Claude Code to activate.${NC}"
+    exit 0
+}
+
+# Check for flags
+case "$1" in
+    --help|-h)
+        show_help
+        exit 0
+        ;;
+    --init)
+        init_project
+        ;;
+    --team)
+        # Delegate to install-team.sh
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        if [ -f "$SCRIPT_DIR/install-team.sh" ]; then
+            exec "$SCRIPT_DIR/install-team.sh"
+        else
+            echo -e "${YELLOW}Downloading team mode installer...${NC}"
+            exec bash <(curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install-team.sh)
+        fi
+        ;;
+esac
 
 EC_VERSION="latest"
 EC_IMAGE="ghcr.io/merewhiplash/engram-cogitator:${EC_VERSION}"
@@ -45,26 +117,34 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
-# Create .engram directory if it doesn't exist
-if [ ! -d ".engram" ]; then
-    echo -e "${YELLOW}Creating .engram directory...${NC}"
-    mkdir -p .engram
-    chmod 777 .engram
+# Create global .engram directory if it doesn't exist
+if [ ! -d "$ENGRAM_DIR" ]; then
+    echo -e "${YELLOW}Creating ~/.engram directory...${NC}"
+    mkdir -p "$ENGRAM_DIR"
 fi
 
-# Add memory.db to .gitignore if not already there
-if [ -f ".gitignore" ]; then
-    if ! grep -q "\.engram/memory\.db" .gitignore; then
-        echo -e "${YELLOW}Adding memory.db to .gitignore...${NC}"
-        echo "" >> .gitignore
-        echo "# Engram Cogitator local memory" >> .gitignore
-        echo ".engram/memory.db" >> .gitignore
-    fi
-else
-    echo -e "${YELLOW}Creating .gitignore with memory.db...${NC}"
-    echo "# Engram Cogitator local memory" > .gitignore
-    echo ".engram/memory.db" >> .gitignore
+# Detect AI tooling
+echo -e "${CYAN}=== AI Tooling Detection ===${NC}"
+echo ""
+
+DETECTED_TOOLS=""
+if [ -d ".claude" ] || command -v claude &> /dev/null; then
+    DETECTED_TOOLS="${DETECTED_TOOLS}claude "
+    echo -e "  ${GREEN}✓${NC} Claude Code detected"
 fi
+if [ -d ".cursor" ]; then
+    DETECTED_TOOLS="${DETECTED_TOOLS}cursor "
+    echo -e "  ${GREEN}✓${NC} Cursor detected"
+fi
+if [ -d ".github/copilot" ]; then
+    DETECTED_TOOLS="${DETECTED_TOOLS}copilot "
+    echo -e "  ${GREEN}✓${NC} GitHub Copilot detected"
+fi
+
+if [ -z "$DETECTED_TOOLS" ]; then
+    echo -e "  ${YELLOW}No AI tooling detected in current directory${NC}"
+fi
+echo ""
 
 # Pull images
 echo -e "${YELLOW}Pulling Ollama image...${NC}"
@@ -80,9 +160,12 @@ docker pull ${EC_IMAGE} 2>/dev/null || {
 echo ""
 echo -e "${CYAN}=== MCP Configuration ===${NC}"
 echo ""
+echo -e "${YELLOW}Global mode:${NC} All memories stored in ~/.engram/memory.db"
+echo -e "${YELLOW}Project identity:${NC} Auto-detected from git remote or directory path"
+echo ""
 
-# Build the docker command
-DOCKER_CMD="docker run -i --rm --network engram-network -v \"\$(pwd)/.engram:/data\" ${EC_IMAGE} --db-path /data/memory.db --ollama-url http://engram-ollama:11434"
+# Build the docker command - note: uses global storage now
+DOCKER_CMD="docker run -i --rm --network engram-network -v \"$ENGRAM_DIR:/data\" ${EC_IMAGE} --db-path /data/memory.db --ollama-url http://engram-ollama:11434"
 
 # Check for Claude Code CLI
 if command -v claude &> /dev/null; then
@@ -92,35 +175,34 @@ if command -v claude &> /dev/null; then
 
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         claude mcp remove engram-cogitator 2>/dev/null || true
+        # Use /bin/sh -c to get working directory at runtime for project detection
+        # --entrypoint overrides default /ec-api to use MCP server instead
         claude mcp add --transport stdio engram-cogitator \
-          --scope project \
-          -- docker run -i --rm \
-          --network engram-network \
-          -v "$(pwd)/.engram:/data" \
-          "${EC_IMAGE}" \
-          --db-path /data/memory.db \
-          --ollama-url http://engram-ollama:11434
-        echo -e "${GREEN}Claude Code configured! (.mcp.json created)${NC}"
+          --scope user \
+          -- /bin/sh -c "docker run -i --rm --entrypoint /usr/local/bin/engram-cogitator --network engram-network -v \$HOME/.engram:/data ${EC_IMAGE} --db-path /data/memory.db --repo \"\$(pwd)\" --ollama-url http://engram-ollama:11434"
+        echo -e "${GREEN}Claude Code configured globally!${NC}"
     fi
     echo ""
 fi
 
 # Always output generic MCP config
-echo -e "${CYAN}For other MCP clients (Cursor, Cline, Windsurf, etc.):${NC}"
+echo -e "${CYAN}For Cursor / VS Code (supports \${workspaceFolder}):${NC}"
 echo ""
-echo "Add this to your MCP configuration file:"
+echo "Add to ~/.cursor/mcp.json or VS Code MCP settings:"
 echo ""
-cat << EOF
+cat << 'EOF'
 {
   "mcpServers": {
     "engram-cogitator": {
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
+        "--entrypoint", "/usr/local/bin/engram-cogitator",
         "--network", "engram-network",
-        "-v", "$(pwd)/.engram:/data",
-        "${EC_IMAGE}",
+        "-v", "${HOME}/.engram:/data",
+        "ghcr.io/merewhiplash/engram-cogitator:latest",
         "--db-path", "/data/memory.db",
+        "--repo", "${workspaceFolder}",
         "--ollama-url", "http://engram-ollama:11434"
       ]
     }
@@ -129,58 +211,57 @@ cat << EOF
 EOF
 
 echo ""
-echo -e "${YELLOW}Common config file locations:${NC}"
-echo "  Cursor:   ~/.cursor/mcp.json"
-echo "  Cline:    VS Code settings > Extensions > Cline > MCP Servers"
-echo "  Windsurf: ~/.codeium/windsurf/mcp_config.json"
+echo -e "${YELLOW}Config file locations:${NC}"
+echo "  Cursor (global):   ~/.cursor/mcp.json"
+echo "  Cursor (project):  .cursor/mcp.json"
+echo "  VS Code/Copilot:   VS Code settings > MCP Servers"
 echo ""
 
-# Base URL for raw files
-EC_RAW_URL="https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main"
+# Install EC skill (project-level for Claude Code)
+if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
+    echo -e "${YELLOW}Installing EC skill for this project...${NC}"
+    mkdir -p .claude/skills/ec-remember
+    curl -sSL "${EC_RAW_URL}/claude/skills/ec-remember/SKILL.md" \
+        -o .claude/skills/ec-remember/SKILL.md
 
-# Install EC skill
-echo -e "${YELLOW}Installing EC skill...${NC}"
-mkdir -p .claude/skills/ec-remember
-curl -sSL "${EC_RAW_URL}/claude/skills/ec-remember/SKILL.md" \
-    -o .claude/skills/ec-remember/SKILL.md
+    # Install session-start hook
+    echo -e "${YELLOW}Installing session-start hook...${NC}"
+    mkdir -p .claude/hooks
+    curl -sSL "${EC_RAW_URL}/claude/hooks/ec-session-start.sh" \
+        -o .claude/hooks/ec-session-start.sh
+    chmod +x .claude/hooks/ec-session-start.sh
 
-# Install session-start hook
-echo -e "${YELLOW}Installing session-start hook...${NC}"
-mkdir -p .claude/hooks
-curl -sSL "${EC_RAW_URL}/claude/hooks/ec-session-start.sh" \
-    -o .claude/hooks/ec-session-start.sh
-chmod +x .claude/hooks/ec-session-start.sh
-
-# Configure hooks in settings.json
-echo -e "${YELLOW}Configuring hooks...${NC}"
-if [ -f ".claude/settings.json" ]; then
-    echo -e "${YELLOW}Note: .claude/settings.json exists. You may need to manually merge EC hooks.${NC}"
-    echo -e "${YELLOW}See: ${EC_RAW_URL}/claude/settings.json${NC}"
-else
-    curl -sSL "${EC_RAW_URL}/claude/settings.json" \
-        -o .claude/settings.json
-fi
-
-# Add EC section to CLAUDE.md
-if [ -f "CLAUDE.md" ]; then
-    if ! grep -q "Engram Cogitator" CLAUDE.md; then
-        echo -e "${YELLOW}Adding EC section to CLAUDE.md...${NC}"
-        curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" >> CLAUDE.md
+    # Configure hooks in settings.json
+    echo -e "${YELLOW}Configuring hooks...${NC}"
+    if [ -f ".claude/settings.json" ]; then
+        echo -e "${YELLOW}Note: .claude/settings.json exists. You may need to manually merge EC hooks.${NC}"
+        echo -e "${YELLOW}See: ${EC_RAW_URL}/claude/settings.json${NC}"
+    else
+        curl -sSL "${EC_RAW_URL}/claude/settings.json" \
+            -o .claude/settings.json
     fi
-else
-    echo -e "${YELLOW}Creating CLAUDE.md with EC section...${NC}"
-    curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" > CLAUDE.md
+
+    # Add EC section to CLAUDE.md
+    if [ -f "CLAUDE.md" ]; then
+        if ! grep -q "Engram Cogitator" CLAUDE.md; then
+            echo -e "${YELLOW}Adding EC section to CLAUDE.md...${NC}"
+            curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" >> CLAUDE.md
+        fi
+    else
+        echo -e "${YELLOW}Creating CLAUDE.md with EC section...${NC}"
+        curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" > CLAUDE.md
+    fi
 fi
 
-# Download generic instructions for other AI assistants
+# Download generic instructions
 echo -e "${YELLOW}Downloading AI assistant instructions...${NC}"
-curl -sSL "${EC_RAW_URL}/INSTRUCTIONS.md" -o .engram/INSTRUCTIONS.md
+curl -sSL "${EC_RAW_URL}/INSTRUCTIONS.md" -o "$ENGRAM_DIR/INSTRUCTIONS.md"
 
 echo ""
 echo -e "${CYAN}=== AI Assistant Instructions ===${NC}"
 echo ""
 echo "For AI assistants other than Claude Code, add the contents of"
-echo ".engram/INSTRUCTIONS.md to your project's instruction file:"
+echo "~/.engram/INSTRUCTIONS.md to your project's instruction file:"
 echo ""
 echo "  Cursor:        .cursor/rules/engram.mdc"
 echo "  GitHub Copilot: .github/copilot-instructions.md"
@@ -216,13 +297,16 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║     Installation Complete!                ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
 echo ""
-echo "Engram Cogitator is now configured for this project."
+echo "Engram Cogitator is now configured."
 echo ""
 echo "What's installed:"
 echo "  - Docker containers (Ollama + EC)"
+echo "  - Global storage at ~/.engram/memory.db"
+if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
 echo "  - ec:remember skill in .claude/skills/"
 echo "  - Session-start hook in .claude/hooks/"
-echo "  - EC section added to CLAUDE.md"
+echo "  - EC section in CLAUDE.md"
+fi
 echo ""
 echo "MCP tools available:"
 echo "  - ec_add        : Store a memory"
@@ -231,5 +315,9 @@ echo "  - ec_list       : List recent memories"
 echo "  - ec_invalidate : Soft-delete a memory"
 echo ""
 echo -e "${YELLOW}Restart your AI coding assistant to activate.${NC}"
-echo "To start Ollama: docker start engram-ollama"
+echo ""
+echo "Commands:"
+echo "  docker start engram-ollama     Start Ollama if stopped"
+echo "  ./install.sh --init            Add skills/hooks to a new project"
+echo "  ./uninstall.sh                 Remove EC from this project"
 echo ""

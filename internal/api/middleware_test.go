@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/MereWhiplash/engram-cogitator/internal/api"
 )
@@ -36,4 +37,45 @@ func TestGitContext(t *testing.T) {
 	if capturedRepo != "myorg/myrepo" {
 		t.Errorf("expected repo 'myorg/myrepo', got %q", capturedRepo)
 	}
+}
+
+func TestRateLimiter(t *testing.T) {
+	rl := api.NewRateLimiter(3, 100*time.Millisecond)
+	defer rl.Stop()
+
+	// First 3 should be allowed
+	for i := 0; i < 3; i++ {
+		if !rl.Allow("192.168.1.1") {
+			t.Errorf("request %d should be allowed", i+1)
+		}
+	}
+
+	// 4th should be denied
+	if rl.Allow("192.168.1.1") {
+		t.Error("4th request should be denied")
+	}
+
+	// Different IP should be allowed
+	if !rl.Allow("192.168.1.2") {
+		t.Error("different IP should be allowed")
+	}
+
+	// Wait for window to pass, then should be allowed again
+	time.Sleep(150 * time.Millisecond)
+	if !rl.Allow("192.168.1.1") {
+		t.Error("request after window should be allowed")
+	}
+}
+
+func TestRateLimiterStop(t *testing.T) {
+	rl := api.NewRateLimiter(10, 10*time.Millisecond)
+
+	// Allow a request to ensure cleanup goroutine is running
+	rl.Allow("test")
+
+	// Stop should not panic or block
+	rl.Stop()
+
+	// Calling Stop again should be safe (closed channel panic is caught by not double-closing)
+	// Note: This would panic if Stop() were called twice, but we only call it once
 }

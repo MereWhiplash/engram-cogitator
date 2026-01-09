@@ -142,6 +142,7 @@ type RateLimiter struct {
 	visitors map[string]*visitor
 	rate     int           // requests per window
 	window   time.Duration // time window
+	stop     chan struct{}
 }
 
 type visitor struct {
@@ -155,22 +156,34 @@ func NewRateLimiter(rate int, window time.Duration) *RateLimiter {
 		visitors: make(map[string]*visitor),
 		rate:     rate,
 		window:   window,
+		stop:     make(chan struct{}),
 	}
 	// Cleanup old entries periodically
 	go rl.cleanup()
 	return rl
 }
 
+// Stop stops the cleanup goroutine
+func (rl *RateLimiter) Stop() {
+	close(rl.stop)
+}
+
 func (rl *RateLimiter) cleanup() {
+	ticker := time.NewTicker(rl.window)
+	defer ticker.Stop()
 	for {
-		time.Sleep(rl.window)
-		rl.mu.Lock()
-		for ip, v := range rl.visitors {
-			if time.Since(v.lastSeen) > rl.window {
-				delete(rl.visitors, ip)
+		select {
+		case <-rl.stop:
+			return
+		case <-ticker.C:
+			rl.mu.Lock()
+			for ip, v := range rl.visitors {
+				if time.Since(v.lastSeen) > rl.window {
+					delete(rl.visitors, ip)
+				}
 			}
+			rl.mu.Unlock()
 		}
-		rl.mu.Unlock()
 	}
 }
 
