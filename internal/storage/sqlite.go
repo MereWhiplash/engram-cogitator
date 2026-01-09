@@ -48,12 +48,16 @@ func (s *SQLite) initSchema() error {
 			rationale TEXT,
 			is_valid BOOLEAN NOT NULL DEFAULT TRUE,
 			superseded_by INTEGER REFERENCES memories(id),
-			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			author_name TEXT NOT NULL DEFAULT '',
+			author_email TEXT NOT NULL DEFAULT '',
+			repo TEXT NOT NULL DEFAULT ''
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
 		CREATE INDEX IF NOT EXISTS idx_memories_area ON memories(area);
 		CREATE INDEX IF NOT EXISTS idx_memories_is_valid ON memories(is_valid);
+		CREATE INDEX IF NOT EXISTS idx_memories_repo ON memories(repo);
 
 		CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings USING vec0(
 			memory_id INTEGER PRIMARY KEY,
@@ -76,8 +80,8 @@ func (s *SQLite) Add(ctx context.Context, mem types.Memory, embedding []float32)
 	defer tx.Rollback()
 
 	result, err := tx.ExecContext(ctx,
-		`INSERT INTO memories (type, area, content, rationale) VALUES (?, ?, ?, ?)`,
-		mem.Type, mem.Area, mem.Content, mem.Rationale,
+		`INSERT INTO memories (type, area, content, rationale, author_name, author_email, repo) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		mem.Type, mem.Area, mem.Content, mem.Rationale, mem.AuthorName, mem.AuthorEmail, mem.Repo,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert memory: %w", err)
@@ -106,13 +110,16 @@ func (s *SQLite) Add(ctx context.Context, mem types.Memory, embedding []float32)
 	}
 
 	return &types.Memory{
-		ID:        id,
-		Type:      mem.Type,
-		Area:      mem.Area,
-		Content:   mem.Content,
-		Rationale: mem.Rationale,
-		IsValid:   true,
-		CreatedAt: time.Now(),
+		ID:          id,
+		Type:        mem.Type,
+		Area:        mem.Area,
+		Content:     mem.Content,
+		Rationale:   mem.Rationale,
+		IsValid:     true,
+		CreatedAt:   time.Now(),
+		AuthorName:  mem.AuthorName,
+		AuthorEmail: mem.AuthorEmail,
+		Repo:        mem.Repo,
 	}, nil
 }
 
@@ -128,7 +135,8 @@ func (s *SQLite) Search(ctx context.Context, embedding []float32, opts types.Sea
 	}
 
 	query := `
-		SELECT m.id, m.type, m.area, m.content, m.rationale, m.is_valid, m.superseded_by, m.created_at
+		SELECT m.id, m.type, m.area, m.content, m.rationale, m.is_valid,
+		       m.superseded_by, m.created_at, m.author_name, m.author_email, m.repo
 		FROM memories m
 		JOIN memory_embeddings e ON m.id = e.memory_id
 		WHERE m.is_valid = TRUE
@@ -142,6 +150,10 @@ func (s *SQLite) Search(ctx context.Context, embedding []float32, opts types.Sea
 	if opts.Area != "" {
 		query += " AND m.area = ?"
 		args = append(args, opts.Area)
+	}
+	if opts.Repo != "" {
+		query += " AND m.repo = ?"
+		args = append(args, opts.Repo)
 	}
 
 	query += `
@@ -160,7 +172,8 @@ func (s *SQLite) List(ctx context.Context, opts types.ListOpts) ([]types.Memory,
 	}
 
 	query := `
-		SELECT id, type, area, content, rationale, is_valid, superseded_by, created_at
+		SELECT id, type, area, content, rationale, is_valid,
+		       superseded_by, created_at, author_name, author_email, repo
 		FROM memories
 		WHERE 1=1
 	`
@@ -176,6 +189,10 @@ func (s *SQLite) List(ctx context.Context, opts types.ListOpts) ([]types.Memory,
 	if opts.Area != "" {
 		query += " AND area = ?"
 		args = append(args, opts.Area)
+	}
+	if opts.Repo != "" {
+		query += " AND repo = ?"
+		args = append(args, opts.Repo)
 	}
 
 	query += " ORDER BY created_at DESC LIMIT ?"
@@ -227,7 +244,11 @@ func (s *SQLite) queryMemories(ctx context.Context, query string, args ...interf
 		var supersededBy sql.NullInt64
 		var rationale sql.NullString
 
-		if err := rows.Scan(&m.ID, &memType, &m.Area, &m.Content, &rationale, &m.IsValid, &supersededBy, &m.CreatedAt); err != nil {
+		err := rows.Scan(
+			&m.ID, &memType, &m.Area, &m.Content, &rationale, &m.IsValid,
+			&supersededBy, &m.CreatedAt, &m.AuthorName, &m.AuthorEmail, &m.Repo,
+		)
+		if err != nil {
 			return nil, err
 		}
 

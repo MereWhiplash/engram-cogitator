@@ -4,11 +4,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/MereWhiplash/engram-cogitator/internal/mcptypes"
 	"github.com/MereWhiplash/engram-cogitator/internal/service"
 	"github.com/MereWhiplash/engram-cogitator/internal/tools"
 	"github.com/MereWhiplash/engram-cogitator/internal/types"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // mockEmbedder implements embedder.Embedder for testing

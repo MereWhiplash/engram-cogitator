@@ -46,11 +46,11 @@ func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input mcpty
 	if h.repo != "" {
 		// Global mode: inject project context
 		memory, err = h.svc.AddWithContext(ctx, service.AddParams{
-			Type:    input.Type,
-			Area:    input.Area,
-			Content: input.Content,
+			Type:      input.Type,
+			Area:      input.Area,
+			Content:   input.Content,
 			Rationale: input.Rationale,
-			Repo:    h.repo,
+			Repo:      h.repo,
 		})
 	} else {
 		// Legacy mode: per-project DB, no repo tag

@@ -4,8 +4,9 @@
 package mcptypes
 
 import (
-	"github.com/MereWhiplash/engram-cogitator/internal/types"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/MereWhiplash/engram-cogitator/internal/types"
 )
 
 // AddInput defines the input schema for ec_add

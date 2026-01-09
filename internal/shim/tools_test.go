@@ -5,20 +5,21 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/MereWhiplash/engram-cogitator/internal/mcptypes"
 	"github.com/MereWhiplash/engram-cogitator/internal/shim"
 	"github.com/MereWhiplash/engram-cogitator/internal/types"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // mockAPIClient implements shim.APIClient for testing
 type mockAPIClient struct {
-	memories    []types.Memory
-	nextID      int64
-	addErr      error
-	searchErr   error
-	listErr     error
-	invalidErr  error
+	memories   []types.Memory
+	nextID     int64
+	addErr     error
+	searchErr  error
+	listErr    error
+	invalidErr error
 }
 
 func (m *mockAPIClient) Add(ctx context.Context, memType, area, content, rationale string) (*types.Memory, error) {

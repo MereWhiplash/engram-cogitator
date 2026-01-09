@@ -76,6 +76,7 @@ func TestRateLimiterStop(t *testing.T) {
 	// Stop should not panic or block
 	rl.Stop()
 
-	// Calling Stop again should be safe (closed channel panic is caught by not double-closing)
-	// Note: This would panic if Stop() were called twice, but we only call it once
+	// Calling Stop again should be safe (sync.Once prevents double-close panic)
+	rl.Stop()
+	rl.Stop() // Call multiple times to ensure it's truly safe
 }
