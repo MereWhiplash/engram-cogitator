@@ -57,13 +57,24 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Build and push API image
+      - name: Build and push API image (team mode)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.api
           push: true
           platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/merewhiplash/engram-cogitator-api:${{ steps.version.outputs.VERSION }}
+            ghcr.io/merewhiplash/engram-cogitator-api:latest
+
+      - name: Build and push solo image (solo mode with MCP server)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          platforms: linux/amd64
           tags: |
             ghcr.io/merewhiplash/engram-cogitator:${{ steps.version.outputs.VERSION }}
             ghcr.io/merewhiplash/engram-cogitator:latest
