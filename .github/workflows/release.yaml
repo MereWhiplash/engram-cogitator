@@ -68,13 +68,16 @@ jobs:
             ghcr.io/merewhiplash/engram-cogitator-api:${{ steps.version.outputs.VERSION }}
             ghcr.io/merewhiplash/engram-cogitator-api:latest
 
+      - name: Set up QEMU (for ARM64 CGO builds)
+        uses: docker/setup-qemu-action@v3
+
       - name: Build and push solo image (solo mode with MCP server)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/merewhiplash/engram-cogitator:${{ steps.version.outputs.VERSION }}
             ghcr.io/merewhiplash/engram-cogitator:latest
