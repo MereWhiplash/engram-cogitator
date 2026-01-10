@@ -2,10 +2,6 @@
 
 Go MCP server providing persistent semantic memory for Claude Code sessions.
 
-## Quick Context
-
-Read `HANDOVER.md` for full context on what's built and what's next.
-
 ## Rules
 
 - User runs dev/build - never run servers
