@@ -2,8 +2,29 @@ apiVersion: v1
 entries:
   engram-cogitator:
   - apiVersion: v2
+    appVersion: 0.3.2
+    created: "2026-01-10T01:57:07.816967429Z"
+    description: Persistent semantic memory for Claude Code teams
+    digest: ee974b0e4a223bb30886ee30eced292bb599e51853806ede119d0326bda2a469
+    icon: https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/logo.jpg
+    keywords:
+    - claude
+    - mcp
+    - memory
+    - ai
+    maintainers:
+    - name: MereWhiplash
+      url: https://github.com/MereWhiplash
+    name: engram-cogitator
+    sources:
+    - https://github.com/MereWhiplash/engram-cogitator
+    type: application
+    urls:
+    - https://merewhiplash.github.io/engram-cogitator/engram-cogitator-0.3.2.tgz
+    version: 0.3.2
+  - apiVersion: v2
     appVersion: 0.3.1
-    created: "2026-01-10T01:28:00.170319382Z"
+    created: "2026-01-10T01:57:07.816343647Z"
     description: Persistent semantic memory for Claude Code teams
     digest: 4d52d2b1b0c87210a3b30bbe5ba73c2e03578ef6dbfe773b32e685ecb61cc1ce
     icon: https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/logo.jpg
@@ -24,7 +45,7 @@ entries:
     version: 0.3.1
   - apiVersion: v2
     appVersion: 0.3.0
-    created: "2026-01-10T01:28:00.169718073Z"
+    created: "2026-01-10T01:57:07.81499969Z"
     description: Persistent semantic memory for Claude Code teams
     digest: 3ba01ce2edf93bc74ea49f84d62a00fda5847ad92b74101d0fe5375986a3c5d4
     icon: https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/logo.jpg
@@ -45,7 +66,7 @@ entries:
     version: 0.3.0
   - apiVersion: v2
     appVersion: 0.2.3
-    created: "2026-01-10T01:28:00.168356252Z"
+    created: "2026-01-10T01:57:07.814459384Z"
     description: Persistent semantic memory for Claude Code teams
     digest: 2c0a2264ca3a0769029c2a06ea561de7ea58de156af2acb6acabf401b6f55f70
     icon: https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/logo.jpg
@@ -64,4 +85,4 @@ entries:
     urls:
     - https://merewhiplash.github.io/engram-cogitator/engram-cogitator-0.2.3.tgz
     version: 0.2.3
-generated: "2026-01-10T01:28:00.167662582Z"
+generated: "2026-01-10T01:57:07.813558917Z"
