@@ -58,7 +58,7 @@ All memories are searchable by semantic similarity. Ask "how do we handle auth?"
 
 ## Solo Mode
 
-Your memories stay local, stored in `.engram/memory.db` per project. No data leaves your machine.
+Your memories stay local in a single global database at `~/.engram/memory.db`. Each project is automatically identified by its git remote (or directory path as fallback), so memories are scoped to the current project but searchable across all projects. No data leaves your machine.
 
 ### Architecture
 
@@ -75,10 +75,14 @@ Your memories stay local, stored in `.engram/memory.db` per project. No data lea
 │                                            ▼        │
 │                               ┌────────────────────┐│
 │                               │ SQLite + Ollama    ││
-│                               │ .engram/memory.db  ││
+│                               │ ~/.engram/memory.db││
 │                               └────────────────────┘│
 └─────────────────────────────────────────────────────┘
 ```
+
+**Project identity is auto-detected:**
+1. Git remote origin → normalized to "org/repo"
+2. If no git remote, uses absolute directory path
 
 ### Installation Options
 
@@ -119,14 +123,11 @@ Auto-configured by install script, or manually:
 
 ```bash
 claude mcp add --transport stdio engram-cogitator \
-  --scope project \
-  -- docker run -i --rm \
-  --network engram-network \
-  -v "$(pwd)/.engram:/data" \
-  ghcr.io/merewhiplash/engram-cogitator:latest \
-  --db-path /data/memory.db \
-  --ollama-url http://engram-ollama:11434
+  --scope user \
+  -- /bin/sh -c 'docker run -i --rm --entrypoint /usr/local/bin/engram-cogitator --network engram-network -v $HOME/.engram:/data ghcr.io/merewhiplash/engram-cogitator:latest --db-path /data/memory.db --repo "$(pwd)" --ollama-url http://engram-ollama:11434'
 ```
+
+Note: The `/bin/sh -c` wrapper captures the working directory at runtime for project detection. The `--entrypoint` flag selects the MCP server binary.
 
 </details>
 
@@ -139,18 +140,14 @@ claude mcp add --transport stdio engram-cogitator \
     "engram-cogitator": {
       "command": "docker",
       "args": [
-        "run",
-        "-i",
-        "--rm",
-        "--network",
-        "engram-network",
-        "-v",
-        "${workspaceFolder}/.engram:/data",
+        "run", "-i", "--rm",
+        "--entrypoint", "/usr/local/bin/engram-cogitator",
+        "--network", "engram-network",
+        "-v", "${HOME}/.engram:/data",
         "ghcr.io/merewhiplash/engram-cogitator:latest",
-        "--db-path",
-        "/data/memory.db",
-        "--ollama-url",
-        "http://engram-ollama:11434"
+        "--db-path", "/data/memory.db",
+        "--repo", "${workspaceFolder}",
+        "--ollama-url", "http://engram-ollama:11434"
       ]
     }
   }
@@ -160,36 +157,9 @@ claude mcp add --transport stdio engram-cogitator \
 </details>
 
 <details>
-<summary><strong>Cline</strong> (VS Code settings)</summary>
+<summary><strong>VS Code / GitHub Copilot</strong></summary>
 
-Go to VS Code Settings → Extensions → Cline → MCP Servers, add:
-
-```json
-{
-  "engram-cogitator": {
-    "command": "docker",
-    "args": [
-      "run",
-      "-i",
-      "--rm",
-      "--network",
-      "engram-network",
-      "-v",
-      "${workspaceFolder}/.engram:/data",
-      "ghcr.io/merewhiplash/engram-cogitator:latest",
-      "--db-path",
-      "/data/memory.db",
-      "--ollama-url",
-      "http://engram-ollama:11434"
-    ]
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><strong>Windsurf</strong> (~/.codeium/windsurf/mcp_config.json)</summary>
+Add to VS Code settings (MCP configuration):
 
 ```json
 {
@@ -197,18 +167,14 @@ Go to VS Code Settings → Extensions → Cline → MCP Servers, add:
     "engram-cogitator": {
       "command": "docker",
       "args": [
-        "run",
-        "-i",
-        "--rm",
-        "--network",
-        "engram-network",
-        "-v",
-        "${workspaceFolder}/.engram:/data",
+        "run", "-i", "--rm",
+        "--entrypoint", "/usr/local/bin/engram-cogitator",
+        "--network", "engram-network",
+        "-v", "${HOME}/.engram:/data",
         "ghcr.io/merewhiplash/engram-cogitator:latest",
-        "--db-path",
-        "/data/memory.db",
-        "--ollama-url",
-        "http://engram-ollama:11434"
+        "--db-path", "/data/memory.db",
+        "--repo", "${workspaceFolder}",
+        "--ollama-url", "http://engram-ollama:11434"
       ]
     }
   }

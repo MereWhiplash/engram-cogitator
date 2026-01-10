@@ -114,8 +114,9 @@ func main() {
 	r.Use(api.MaxBodySize)
 
 	// Rate limiting (if enabled)
+	var limiter *api.RateLimiter
 	if *rateLimit > 0 {
-		limiter := api.NewRateLimiter(*rateLimit, time.Minute)
+		limiter = api.NewRateLimiter(*rateLimit, time.Minute)
 		r.Use(limiter.Middleware)
 	}
 
@@ -157,6 +158,11 @@ func main() {
 		<-sigChan
 
 		log.Println("Shutting down...")
+
+		// Stop rate limiter cleanup goroutine
+		if limiter != nil {
+			limiter.Stop()
+		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
