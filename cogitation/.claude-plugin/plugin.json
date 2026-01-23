@@ -1,0 +1,10 @@
+{
+  "name": "cogitation",
+  "description": "Opinionated development workflows powered by Engram Cogitator's persistent semantic memory. Requires EC to be running.",
+  "version": "0.1.0",
+  "author": {
+    "name": "MereWhiplash"
+  },
+  "repository": "https://github.com/MereWhiplash/engram-cogitator",
+  "license": "MIT"
+}
