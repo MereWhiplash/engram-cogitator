@@ -1,0 +1,25 @@
+{
+  "name": "engram-cogitator",
+  "owner": {
+    "name": "MereWhiplash"
+  },
+  "metadata": {
+    "description": "Persistent semantic memory for Claude Code with opinionated development workflows",
+    "version": "0.1.0",
+    "pluginRoot": "."
+  },
+  "plugins": [
+    {
+      "name": "cogitation",
+      "source": "./cogitation",
+      "description": "Opinionated development workflows powered by EC's persistent memory. Includes TDD, debugging, brainstorming, planning, and more. Requires engram-cogitator MCP server.",
+      "version": "0.1.0",
+      "author": {
+        "name": "MereWhiplash"
+      },
+      "homepage": "https://github.com/MereWhiplash/engram-cogitator",
+      "license": "MIT",
+      "keywords": ["memory", "tdd", "debugging", "planning", "workflows", "development"]
+    }
+  ]
+}

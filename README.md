@@ -22,11 +22,115 @@
 
 ## Quick Start (Solo Mode)
 
+**Step 1: Install the MCP server**
 ```bash
 curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install.sh | bash
 ```
 
-**Prerequisites:** Docker running. That's it. The script handles everything else.
+**Step 2: Install the cogitation plugin** (in Claude Code)
+```
+/plugin marketplace add MereWhiplash/engram-cogitator
+/plugin install cogitation@engram-cogitator
+```
+
+**Step 3: Initialize your project**
+```
+/cogitation:init
+```
+
+**Prerequisites:** Docker running. That's it.
+
+---
+
+## What's Included
+
+### MCP Server (ec_* tools)
+The memory backend. Provides `ec_add`, `ec_search`, `ec_list`, `ec_invalidate` for storing and retrieving semantic memories.
+
+### Cogitation Plugin (skills)
+Opinionated development workflows that leverage EC's persistent memory.
+
+#### The Development Workflow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│   /cogitation:init          (one-time project setup)                │
+│         │                                                           │
+│         ▼                                                           │
+│   /cogitation:brainstorming (explore idea → design doc)             │
+│         │                                                           │
+│         ▼                                                           │
+│   /cogitation:writing-plans (design doc → implementation plan)      │
+│         │                                                           │
+│         ▼                                                           │
+│   /cogitation:executing-plans (plan → working code)                 │
+│         │                                                           │
+│         ▼                                                           │
+│   /cogitation:finish        (verify, store learnings, merge)        │
+│                                                                     │
+│   /cogitation:audit         (periodic memory cleanup)               │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### Main Commands
+
+**`/cogitation:init`** - First-time project setup
+- Verifies EC connection is working
+- Scaffolds `docs/designs/` and `docs/plans/` directories
+- Configures test, build, and lint commands for your project
+- Stores project config in EC for other skills to use
+
+**`/cogitation:brainstorming`** - Turn ideas into designs
+- Searches EC for prior decisions and patterns in related areas
+- Creates a feature branch
+- Guides you through requirements via Q&A
+- Generates multiple approaches with tradeoffs
+- Produces a design doc in `docs/designs/YYYY-MM-DD-<topic>.md`
+- Stores key decisions in EC
+
+**`/cogitation:writing-plans`** - Turn designs into plans
+- Loads the design doc and relevant EC context
+- Breaks work into small, testable batches (TDD-style)
+- Each batch: write test → implement → verify
+- Produces a plan in `docs/plans/YYYY-MM-DD-<topic>.md`
+- Plans are detailed enough for zero-context execution
+
+**`/cogitation:executing-plans`** - Turn plans into code
+- Loads plan and EC context before each batch
+- Executes batches with review checkpoints
+- Runs tests after each batch
+- Pauses for your approval before continuing
+- Stores learnings discovered during implementation
+
+**`/cogitation:finish`** - Complete the work
+- Runs all verification (tests, lint, build)
+- Reviews session for memories worth storing
+- Presents merge options (squash, merge, rebase)
+- Cleans up feature branch after merge
+
+**`/cogitation:audit`** - Memory maintenance
+- Lists all stored memories by type
+- Finds duplicates and stale entries
+- Presents cleanup recommendations
+- Invalidates outdated memories
+
+#### Additional Skills
+
+These are invoked automatically by Claude based on context:
+
+| Skill | When It's Used |
+|-------|----------------|
+| `onboard` | Start of session - loads project context from EC |
+| `tdd` | Writing tests and implementation |
+| `debugging` | Investigating bugs or test failures |
+| `remember` | When you say "remember this" or make key decisions |
+| `config` | Updating project test/build/lint commands |
+| `verifying` | Before claiming tests pass or work is done |
+| `requesting-review` | Preparing a PR for code review |
+| `receiving-review` | Responding to code review feedback |
+| `parallel-agents` | When multiple independent tasks can run concurrently |
 
 ---
 
@@ -97,7 +201,8 @@ This installs:
 - Ollama container for local embeddings
 - EC server container
 - MCP configuration for your client
-- Session hooks and skills
+
+**Note:** Skills are now installed separately via the cogitation plugin (see Quick Start).
 
 #### Option 2: Binary + Local Ollama
 
@@ -350,16 +455,26 @@ The AI assistant uses these tools automatically when relevant. You can also prom
 
 > "Invalidate the memory about using REST - we switched to GraphQL"
 
-### Session Hooks (Claude Code)
+### Cogitation Workflows (Claude Code)
 
-The install script adds a session-start hook that automatically searches for relevant memories when you start working. Your AI assistant gets context like:
+The cogitation plugin provides opinionated workflows that integrate with EC. Use `/cogitation:onboard` at the start of a session to load relevant memories:
 
 ```
-Relevant memories for this codebase:
-- [decision/auth] Use JWT with 15-minute expiry, refresh tokens in httpOnly cookies
-- [pattern/api] All endpoints return {data, error, meta} shape
-- [learning/postgres] Connection pooling maxes at 20 for this instance size
+Project Context Loaded
+
+Configuration:
+- Test: go test ./...
+- Lint: golangci-lint run
+
+Key Decisions (3):
+- [auth] Use JWT with 15-minute expiry, refresh tokens in httpOnly cookies
+- [api] All endpoints return {data, error, meta} shape
+
+Gotchas to Know (2):
+- [postgres] Connection pooling maxes at 20 for this instance size
 ```
+
+The workflows automatically search and store memories as you work through the development cycle.
 
 ---
 
@@ -425,6 +540,12 @@ golangci-lint run ./...
 pip install pre-commit
 pre-commit install
 ```
+
+---
+
+## Acknowledgments
+
+A huge thank you to the team at [Obra](https://github.com/obra) whose [Superpowers](https://github.com/obra/superpowers) project was a major influence on the cogitation skills. Their work on structured AI-assisted development workflows helped shape the patterns and philosophies behind this project.
 
 ---
 

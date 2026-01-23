@@ -18,57 +18,52 @@ show_help() {
     echo "Usage: install.sh [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  (no args)   Full installation (first time setup)"
-    echo "  --init      Initialize current project only (add skills/hooks)"
+    echo "  (no args)   Full installation (MCP server + cogitation plugin)"
+    echo "  --init      Initialize current project only (deprecated, use marketplace)"
     echo "  --team      Team mode installation (Kubernetes)"
     echo "  --help      Show this help message"
     echo ""
+    echo "After installation, install the cogitation plugin:"
+    echo "  /plugin marketplace add MereWhiplash/engram-cogitator"
+    echo "  /plugin install cogitation@engram-cogitator"
+    echo ""
 }
 
-# Initialize project (skills/hooks only)
+# Initialize project (deprecated - now uses marketplace)
 init_project() {
     echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║     Engram Cogitator - Project Init       ║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
     echo ""
+    echo -e "${YELLOW}Note: --init is deprecated. Use the plugin marketplace instead:${NC}"
+    echo ""
+    echo "  1. Add the marketplace:"
+    echo "     /plugin marketplace add MereWhiplash/engram-cogitator"
+    echo ""
+    echo "  2. Install the cogitation plugin:"
+    echo "     /plugin install cogitation@engram-cogitator"
+    echo ""
+    echo "  3. Initialize your project:"
+    echo "     /cogitation:init"
+    echo ""
+    echo "The cogitation plugin includes all EC skills plus opinionated"
+    echo "development workflows (TDD, debugging, planning, etc.)."
+    echo ""
 
-    # Install EC skill
-    echo -e "${YELLOW}Installing EC skill...${NC}"
-    mkdir -p .claude/skills/ec-remember
-    curl -sSL "${EC_RAW_URL}/claude/skills/ec-remember/SKILL.md" \
-        -o .claude/skills/ec-remember/SKILL.md
-
-    # Install session-start hook
-    echo -e "${YELLOW}Installing session-start hook...${NC}"
-    mkdir -p .claude/hooks
-    curl -sSL "${EC_RAW_URL}/claude/hooks/ec-session-start.sh" \
-        -o .claude/hooks/ec-session-start.sh
-    chmod +x .claude/hooks/ec-session-start.sh
-
-    # Configure hooks in settings.json
-    if [ -f ".claude/settings.json" ]; then
-        echo -e "${YELLOW}Note: .claude/settings.json exists. You may need to manually merge EC hooks.${NC}"
-    else
-        curl -sSL "${EC_RAW_URL}/claude/settings.json" \
-            -o .claude/settings.json
-    fi
-
-    # Add EC section to CLAUDE.md
+    # Still add CLAUDE.md snippet for EC tool documentation
     if [ -f "CLAUDE.md" ]; then
         if ! grep -q "Engram Cogitator" CLAUDE.md; then
             echo -e "${YELLOW}Adding EC section to CLAUDE.md...${NC}"
             curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" >> CLAUDE.md
+            echo -e "${GREEN}Added EC documentation to CLAUDE.md${NC}"
         fi
     else
         echo -e "${YELLOW}Creating CLAUDE.md with EC section...${NC}"
         curl -sSL "${EC_RAW_URL}/claude/CLAUDE.md.snippet" > CLAUDE.md
+        echo -e "${GREEN}Created CLAUDE.md with EC documentation${NC}"
     fi
 
     echo ""
-    echo -e "${GREEN}Project initialized!${NC}"
-    echo "Added: .claude/skills/ec-remember/, .claude/hooks/ec-session-start.sh"
-    echo ""
-    echo -e "${YELLOW}Restart Claude Code to activate.${NC}"
     exit 0
 }
 
@@ -217,31 +212,8 @@ echo "  Cursor (project):  .cursor/mcp.json"
 echo "  VS Code/Copilot:   VS Code settings > MCP Servers"
 echo ""
 
-# Install EC skill (project-level for Claude Code)
+# Add EC documentation to CLAUDE.md (if Claude Code project detected)
 if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
-    echo -e "${YELLOW}Installing EC skill for this project...${NC}"
-    mkdir -p .claude/skills/ec-remember
-    curl -sSL "${EC_RAW_URL}/claude/skills/ec-remember/SKILL.md" \
-        -o .claude/skills/ec-remember/SKILL.md
-
-    # Install session-start hook
-    echo -e "${YELLOW}Installing session-start hook...${NC}"
-    mkdir -p .claude/hooks
-    curl -sSL "${EC_RAW_URL}/claude/hooks/ec-session-start.sh" \
-        -o .claude/hooks/ec-session-start.sh
-    chmod +x .claude/hooks/ec-session-start.sh
-
-    # Configure hooks in settings.json
-    echo -e "${YELLOW}Configuring hooks...${NC}"
-    if [ -f ".claude/settings.json" ]; then
-        echo -e "${YELLOW}Note: .claude/settings.json exists. You may need to manually merge EC hooks.${NC}"
-        echo -e "${YELLOW}See: ${EC_RAW_URL}/claude/settings.json${NC}"
-    else
-        curl -sSL "${EC_RAW_URL}/claude/settings.json" \
-            -o .claude/settings.json
-    fi
-
-    # Add EC section to CLAUDE.md
     if [ -f "CLAUDE.md" ]; then
         if ! grep -q "Engram Cogitator" CLAUDE.md; then
             echo -e "${YELLOW}Adding EC section to CLAUDE.md...${NC}"
@@ -297,14 +269,12 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║     Installation Complete!                ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
 echo ""
-echo "Engram Cogitator is now configured."
+echo "Engram Cogitator MCP server is now configured."
 echo ""
 echo "What's installed:"
 echo "  - Docker containers (Ollama + EC)"
 echo "  - Global storage at ~/.engram/memory.db"
 if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
-echo "  - ec:remember skill in .claude/skills/"
-echo "  - Session-start hook in .claude/hooks/"
 echo "  - EC section in CLAUDE.md"
 fi
 echo ""
@@ -314,10 +284,21 @@ echo "  - ec_search     : Find relevant memories"
 echo "  - ec_list       : List recent memories"
 echo "  - ec_invalidate : Soft-delete a memory"
 echo ""
-echo -e "${YELLOW}Restart your AI coding assistant to activate.${NC}"
+echo -e "${CYAN}=== Install Cogitation Plugin (Recommended) ===${NC}"
+echo ""
+echo "The cogitation plugin provides opinionated development workflows"
+echo "that leverage EC's persistent memory (TDD, debugging, planning, etc.)"
+echo ""
+echo "In Claude Code, run:"
+echo -e "  ${YELLOW}/plugin marketplace add MereWhiplash/engram-cogitator${NC}"
+echo -e "  ${YELLOW}/plugin install cogitation@engram-cogitator${NC}"
+echo ""
+echo "Then initialize your project:"
+echo -e "  ${YELLOW}/cogitation:init${NC}"
+echo ""
+echo -e "${YELLOW}Restart your AI coding assistant to activate the MCP server.${NC}"
 echo ""
 echo "Commands:"
 echo "  docker start engram-ollama     Start Ollama if stopped"
-echo "  ./install.sh --init            Add skills/hooks to a new project"
 echo "  ./uninstall.sh                 Remove EC from this project"
 echo ""
