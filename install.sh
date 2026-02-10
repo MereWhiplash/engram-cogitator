@@ -123,6 +123,20 @@ if [ ! -d "$ENGRAM_DIR" ]; then
     mkdir -p "$ENGRAM_DIR"
 fi
 
+# Deploy container lifecycle wrapper script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/scripts/ec-run.sh" ]; then
+    echo -e "${YELLOW}Installing container lifecycle wrapper...${NC}"
+    cp "$SCRIPT_DIR/scripts/ec-run.sh" "$ENGRAM_DIR/ec-run.sh"
+    chmod +x "$ENGRAM_DIR/ec-run.sh"
+    echo -e "${GREEN}Installed ~/.engram/ec-run.sh${NC}"
+else
+    echo -e "${YELLOW}Downloading container lifecycle wrapper...${NC}"
+    curl -sSL "${EC_RAW_URL}/scripts/ec-run.sh" -o "$ENGRAM_DIR/ec-run.sh"
+    chmod +x "$ENGRAM_DIR/ec-run.sh"
+    echo -e "${GREEN}Installed ~/.engram/ec-run.sh${NC}"
+fi
+
 # Detect AI tooling
 echo -e "${CYAN}=== AI Tooling Detection ===${NC}"
 echo ""
@@ -164,9 +178,6 @@ echo -e "${YELLOW}Global mode:${NC} All memories stored in ~/.engram/memory.db"
 echo -e "${YELLOW}Project identity:${NC} Auto-detected from git remote or directory path"
 echo ""
 
-# Build the docker command - note: uses global storage now
-DOCKER_CMD="docker run -i --rm --network engram-network -v \"$ENGRAM_DIR:/data\" ${EC_IMAGE} --db-path /data/memory.db --ollama-url http://engram-ollama:11434"
-
 # Check for Claude Code CLI
 if command -v claude &> /dev/null; then
     echo "Claude Code CLI detected."
@@ -175,11 +186,10 @@ if command -v claude &> /dev/null; then
 
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         claude mcp remove engram-cogitator 2>/dev/null || true
-        # Use /bin/sh -c to get working directory at runtime for project detection
-        # --entrypoint overrides default /ec-api to use MCP server instead
+        # Use wrapper script for container lifecycle management (naming, labels, cleanup)
         claude mcp add --transport stdio engram-cogitator \
           --scope user \
-          -- /bin/sh -c "docker run -i --rm --entrypoint /usr/local/bin/engram-cogitator --network engram-network -v \$HOME/.engram:/data ${EC_IMAGE} --db-path /data/memory.db --repo \"\$(pwd)\" --ollama-url http://engram-ollama:11434"
+          -- /bin/sh -c "\$HOME/.engram/ec-run.sh"
         echo -e "${GREEN}Claude Code configured globally!${NC}"
     fi
     echo ""
@@ -194,17 +204,8 @@ cat << 'EOF'
 {
   "mcpServers": {
     "engram-cogitator": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "--entrypoint", "/usr/local/bin/engram-cogitator",
-        "--network", "engram-network",
-        "-v", "${HOME}/.engram:/data",
-        "ghcr.io/merewhiplash/engram-cogitator:latest",
-        "--db-path", "/data/memory.db",
-        "--repo", "${workspaceFolder}",
-        "--ollama-url", "http://engram-ollama:11434"
-      ]
+      "command": "/bin/sh",
+      "args": ["-c", "$HOME/.engram/ec-run.sh"]
     }
   }
 }
@@ -274,6 +275,22 @@ if ! docker network inspect engram-network &> /dev/null; then
     echo -e "${YELLOW}Creating Docker network...${NC}"
     docker network create engram-network
 fi
+
+# One-time migration: clean up orphaned EC containers from before lifecycle management
+# These are unlabeled containers running the EC image that predate the wrapper script
+echo -e "${YELLOW}Checking for orphaned EC containers...${NC}"
+ORPHANED=$(docker ps -a --filter "ancestor=${EC_IMAGE}" --format '{{.ID}} {{.Names}}' 2>/dev/null | grep -v 'ec-mcp-\|ec-hook-' || true)
+if [ -n "$ORPHANED" ]; then
+    echo -e "${YELLOW}Found orphaned (pre-wrapper) EC containers:${NC}"
+    echo "$ORPHANED" | while read -r cid cname; do
+        echo -e "  Removing: ${cname} (${cid})"
+        docker rm -f "$cid" &>/dev/null || true
+    done
+    echo -e "${GREEN}Orphaned containers cleaned up.${NC}"
+else
+    echo -e "${GREEN}No orphaned containers found.${NC}"
+fi
+echo ""
 
 # Start Ollama container if not running
 if ! docker ps --format '{{.Names}}' | grep -q '^engram-ollama$'; then

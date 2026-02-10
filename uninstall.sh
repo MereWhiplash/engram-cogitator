@@ -86,6 +86,29 @@ remove_global_docker() {
         return
     fi
 
+    # Stop and remove all labeled EC containers (MCP servers + hooks)
+    local ec_containers
+    ec_containers=$(docker ps -a --filter "label=io.engram-cogitator.role" --format '{{.ID}} {{.Names}}' 2>/dev/null) || true
+    if [ -n "$ec_containers" ]; then
+        echo -e "${YELLOW}Removing labeled EC containers...${NC}"
+        echo "$ec_containers" | while read -r cid cname; do
+            echo -e "  Removing: ${cname} (${cid})"
+            docker rm -f "$cid" &>/dev/null || true
+        done
+    fi
+
+    # Also catch unlabeled legacy containers by ancestor image
+    local EC_IMAGE="ghcr.io/merewhiplash/engram-cogitator:latest"
+    local legacy_containers
+    legacy_containers=$(docker ps -a --filter "ancestor=${EC_IMAGE}" --format '{{.ID}} {{.Names}}' 2>/dev/null) || true
+    if [ -n "$legacy_containers" ]; then
+        echo -e "${YELLOW}Removing legacy (unlabeled) EC containers...${NC}"
+        echo "$legacy_containers" | while read -r cid cname; do
+            echo -e "  Removing: ${cname} (${cid})"
+            docker rm -f "$cid" &>/dev/null || true
+        done
+    fi
+
     # Stop and remove Ollama container
     if docker ps -a --format '{{.Names}}' | grep -q '^engram-ollama$'; then
         echo -e "${YELLOW}Stopping engram-ollama container...${NC}"
@@ -114,6 +137,12 @@ remove_global_docker() {
     if command -v claude &> /dev/null; then
         echo -e "${YELLOW}Removing MCP config from Claude Code...${NC}"
         claude mcp remove engram-cogitator 2>/dev/null || true
+    fi
+
+    # Remove wrapper script
+    if [ -f "$ENGRAM_DIR/ec-run.sh" ]; then
+        echo -e "${YELLOW}Removing container lifecycle wrapper...${NC}"
+        rm -f "$ENGRAM_DIR/ec-run.sh"
     fi
 
     echo -e "${GREEN}Docker resources removed.${NC}"
