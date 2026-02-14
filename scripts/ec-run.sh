@@ -63,6 +63,8 @@ PRUNE_PID=$!
 
 # --- Signal handling: ensure container cleanup on exit ---
 cleanup() {
+    # Graceful stop (allows SQLite WAL flush), then force-remove
+    docker stop --time 5 "$CONTAINER_NAME" &>/dev/null || true
     docker rm -f "$CONTAINER_NAME" &>/dev/null || true
     # Reap background prune if still running
     kill "$PRUNE_PID" 2>/dev/null || true
@@ -73,6 +75,11 @@ trap cleanup EXIT INT TERM HUP
 # --- Start the MCP server container ---
 # Do NOT use --rm — we own the lifecycle via the trap.
 # Do NOT use exec — the trap must fire after docker exits.
+
+# Guard against PID reuse: if a stale container with our name exists
+# (background prune may not have reached it yet), remove it synchronously.
+docker rm -f "$CONTAINER_NAME" &>/dev/null || true
+
 docker run -i \
     --name "$CONTAINER_NAME" \
     --label "${LABEL_PREFIX}.role=mcp-server" \
