@@ -11,6 +11,18 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ec-session-end.sh",
+            "timeout": 15
+          }
+        ]
+      }
     ]
   }
 }
