@@ -26,8 +26,17 @@ if [ ! -f "$PROJECT_DIR/.engram/memory.db" ]; then
     exit 0
 fi
 
+# Derive container name for the hook
+PROJECT_SHORT="$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g')"
+HOOK_CONTAINER_NAME="ec-hook-${PROJECT_SHORT}-$$"
+
 # Get recent memories via CLI mode
+# Hook containers use --rm (they exit quickly so --rm works fine)
 MEMORIES=$(docker run -i --rm \
+    --name "$HOOK_CONTAINER_NAME" \
+    --label "io.engram-cogitator.role=session-hook" \
+    --label "io.engram-cogitator.project=${PROJECT_DIR}" \
+    --label "io.engram-cogitator.project-short=${PROJECT_SHORT}" \
     --network engram-network \
     -v "$PROJECT_DIR/.engram:/data" \
     "$EC_IMAGE" \
