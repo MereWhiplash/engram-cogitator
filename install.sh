@@ -18,7 +18,7 @@ show_help() {
     echo "Usage: install.sh [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  (no args)   Full installation (first time setup)"
+    echo "  (no args)   Install or update (auto-detected)"
     echo "  --init      Initialize current project only (add skills/hooks)"
     echo "  --team      Team mode installation (Kubernetes)"
     echo "  --help      Show this help message"
@@ -98,9 +98,23 @@ EC_IMAGE="ghcr.io/merewhiplash/engram-cogitator:${EC_VERSION}"
 OLLAMA_IMAGE="ollama/ollama:latest"
 EMBEDDING_MODEL="nomic-embed-text"
 
-echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║     Engram Cogitator - Installation       ║${NC}"
-echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
+# Detect if this is an update (wrapper + engram dir already exist)
+IS_UPDATE=false
+if [ -f "$ENGRAM_DIR/ec-run.sh" ] && [ -d "$ENGRAM_DIR" ]; then
+    IS_UPDATE=true
+fi
+
+if [ "$IS_UPDATE" = true ]; then
+    echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║     Engram Cogitator - Update             ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${CYAN}Existing installation detected. Updating...${NC}"
+else
+    echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║     Engram Cogitator - Installation       ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
+fi
 echo ""
 
 # Check for Docker
@@ -126,7 +140,7 @@ fi
 # Deploy container lifecycle wrapper script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/scripts/ec-run.sh" ]; then
-    echo -e "${YELLOW}Installing container lifecycle wrapper...${NC}"
+    echo -e "${YELLOW}Updating container lifecycle wrapper...${NC}"
     cp "$SCRIPT_DIR/scripts/ec-run.sh" "$ENGRAM_DIR/ec-run.sh"
     chmod +x "$ENGRAM_DIR/ec-run.sh"
     echo -e "${GREEN}Installed ~/.engram/ec-run.sh${NC}"
@@ -137,70 +151,74 @@ else
     echo -e "${GREEN}Installed ~/.engram/ec-run.sh${NC}"
 fi
 
-# Detect AI tooling
-echo -e "${CYAN}=== AI Tooling Detection ===${NC}"
-echo ""
-
-DETECTED_TOOLS=""
-if [ -d ".claude" ] || command -v claude &> /dev/null; then
-    DETECTED_TOOLS="${DETECTED_TOOLS}claude "
-    echo -e "  ${GREEN}✓${NC} Claude Code detected"
-fi
-if [ -d ".cursor" ]; then
-    DETECTED_TOOLS="${DETECTED_TOOLS}cursor "
-    echo -e "  ${GREEN}✓${NC} Cursor detected"
-fi
-if [ -d ".github/copilot" ]; then
-    DETECTED_TOOLS="${DETECTED_TOOLS}copilot "
-    echo -e "  ${GREEN}✓${NC} GitHub Copilot detected"
-fi
-
-if [ -z "$DETECTED_TOOLS" ]; then
-    echo -e "  ${YELLOW}No AI tooling detected in current directory${NC}"
-fi
-echo ""
-
-# Pull images
-echo -e "${YELLOW}Pulling Ollama image...${NC}"
-docker pull ${OLLAMA_IMAGE}
-
+# Pull EC image (always — this is the main thing an update does)
 echo -e "${YELLOW}Pulling Engram Cogitator image...${NC}"
 docker pull ${EC_IMAGE} 2>/dev/null || {
     echo -e "${YELLOW}Image not found in registry, will build locally...${NC}"
     EC_IMAGE="engram-cogitator:local"
 }
 
-# Configure MCP server
-echo ""
-echo -e "${CYAN}=== MCP Configuration ===${NC}"
-echo ""
-echo -e "${YELLOW}Global mode:${NC} All memories stored in ~/.engram/memory.db"
-echo -e "${YELLOW}Project identity:${NC} Auto-detected from git remote or directory path"
-echo ""
+# --- Fresh install only: full setup ---
+if [ "$IS_UPDATE" = false ]; then
 
-# Check for Claude Code CLI
-if command -v claude &> /dev/null; then
-    echo "Claude Code CLI detected."
-    read -p "Configure Claude Code automatically? [Y/n] " -n 1 -r
+    # Detect AI tooling
+    echo -e "${CYAN}=== AI Tooling Detection ===${NC}"
     echo ""
 
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-        claude mcp remove engram-cogitator 2>/dev/null || true
-        # Use wrapper script for container lifecycle management (naming, labels, cleanup)
-        claude mcp add --transport stdio engram-cogitator \
-          --scope user \
-          -- /bin/sh -c "\$HOME/.engram/ec-run.sh"
-        echo -e "${GREEN}Claude Code configured globally!${NC}"
+    DETECTED_TOOLS=""
+    if [ -d ".claude" ] || command -v claude &> /dev/null; then
+        DETECTED_TOOLS="${DETECTED_TOOLS}claude "
+        echo -e "  ${GREEN}✓${NC} Claude Code detected"
+    fi
+    if [ -d ".cursor" ]; then
+        DETECTED_TOOLS="${DETECTED_TOOLS}cursor "
+        echo -e "  ${GREEN}✓${NC} Cursor detected"
+    fi
+    if [ -d ".github/copilot" ]; then
+        DETECTED_TOOLS="${DETECTED_TOOLS}copilot "
+        echo -e "  ${GREEN}✓${NC} GitHub Copilot detected"
+    fi
+
+    if [ -z "$DETECTED_TOOLS" ]; then
+        echo -e "  ${YELLOW}No AI tooling detected in current directory${NC}"
     fi
     echo ""
-fi
 
-# Always output generic MCP config
-echo -e "${CYAN}For Cursor / VS Code (supports \${workspaceFolder}):${NC}"
-echo ""
-echo "Add to ~/.cursor/mcp.json or VS Code MCP settings:"
-echo ""
-cat << 'EOF'
+    # Pull Ollama image (only on fresh install — user manages Ollama updates separately)
+    echo -e "${YELLOW}Pulling Ollama image...${NC}"
+    docker pull ${OLLAMA_IMAGE}
+
+    # Configure MCP server
+    echo ""
+    echo -e "${CYAN}=== MCP Configuration ===${NC}"
+    echo ""
+    echo -e "${YELLOW}Global mode:${NC} All memories stored in ~/.engram/memory.db"
+    echo -e "${YELLOW}Project identity:${NC} Auto-detected from git remote or directory path"
+    echo ""
+
+    # Check for Claude Code CLI
+    if command -v claude &> /dev/null; then
+        echo "Claude Code CLI detected."
+        read -p "Configure Claude Code automatically? [Y/n] " -n 1 -r
+        echo ""
+
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            claude mcp remove engram-cogitator --scope user 2>/dev/null || true
+            # Use wrapper script for container lifecycle management (naming, labels, cleanup)
+            claude mcp add --transport stdio engram-cogitator \
+              --scope user \
+              -- /bin/sh -c "\$HOME/.engram/ec-run.sh"
+            echo -e "${GREEN}Claude Code configured globally!${NC}"
+        fi
+        echo ""
+    fi
+
+    # Always output generic MCP config
+    echo -e "${CYAN}For Cursor / VS Code (supports \${workspaceFolder}):${NC}"
+    echo ""
+    echo "Add to ~/.cursor/mcp.json or VS Code MCP settings:"
+    echo ""
+    cat << 'EOF'
 {
   "mcpServers": {
     "engram-cogitator": {
@@ -211,14 +229,49 @@ cat << 'EOF'
 }
 EOF
 
-echo ""
-echo -e "${YELLOW}Config file locations:${NC}"
-echo "  Cursor (global):   ~/.cursor/mcp.json"
-echo "  Cursor (project):  .cursor/mcp.json"
-echo "  VS Code/Copilot:   VS Code settings > MCP Servers"
-echo ""
+    echo ""
+    echo -e "${YELLOW}Config file locations:${NC}"
+    echo "  Cursor (global):   ~/.cursor/mcp.json"
+    echo "  Cursor (project):  .cursor/mcp.json"
+    echo "  VS Code/Copilot:   VS Code settings > MCP Servers"
+    echo ""
 
-# Install EC skill (project-level for Claude Code)
+    # Download generic instructions
+    echo -e "${YELLOW}Downloading AI assistant instructions...${NC}"
+    curl -sSL "${EC_RAW_URL}/INSTRUCTIONS.md" -o "$ENGRAM_DIR/INSTRUCTIONS.md"
+
+    echo ""
+    echo -e "${CYAN}=== AI Assistant Instructions ===${NC}"
+    echo ""
+    echo "For AI assistants other than Claude Code, add the contents of"
+    echo "~/.engram/INSTRUCTIONS.md to your project's instruction file:"
+    echo ""
+    echo "  Cursor:        .cursor/rules/engram.mdc"
+    echo "  GitHub Copilot: .github/copilot-instructions.md"
+    echo "  Gemini:        GEMINI.md"
+    echo "  Generic:       AGENTS.md"
+    echo ""
+
+else
+    # --- Update path: re-register MCP (in case wrapper args changed) ---
+    if command -v claude &> /dev/null; then
+        echo -e "${YELLOW}Updating Claude Code MCP registration...${NC}"
+        claude mcp remove engram-cogitator --scope user 2>/dev/null || true
+        claude mcp add --transport stdio engram-cogitator \
+          --scope user \
+          -- /bin/sh -c "\$HOME/.engram/ec-run.sh"
+        echo -e "${GREEN}Claude Code MCP updated.${NC}"
+    fi
+
+    # Update instructions file
+    echo -e "${YELLOW}Updating AI assistant instructions...${NC}"
+    curl -sSL "${EC_RAW_URL}/INSTRUCTIONS.md" -o "$ENGRAM_DIR/INSTRUCTIONS.md"
+
+fi
+
+# --- Shared steps (both install and update) ---
+
+# Install/update EC skill (project-level for Claude Code)
 if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
     echo -e "${YELLOW}Installing EC skill for this project...${NC}"
     mkdir -p .claude/skills/ec-remember
@@ -233,13 +286,15 @@ if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
     chmod +x .claude/hooks/ec-session-start.sh
 
     # Configure hooks in settings.json
-    echo -e "${YELLOW}Configuring hooks...${NC}"
-    if [ -f ".claude/settings.json" ]; then
-        echo -e "${YELLOW}Note: .claude/settings.json exists. You may need to manually merge EC hooks.${NC}"
-        echo -e "${YELLOW}See: ${EC_RAW_URL}/claude/settings.json${NC}"
-    else
-        curl -sSL "${EC_RAW_URL}/claude/settings.json" \
-            -o .claude/settings.json
+    if [ "$IS_UPDATE" = false ]; then
+        echo -e "${YELLOW}Configuring hooks...${NC}"
+        if [ -f ".claude/settings.json" ]; then
+            echo -e "${YELLOW}Note: .claude/settings.json exists. You may need to manually merge EC hooks.${NC}"
+            echo -e "${YELLOW}See: ${EC_RAW_URL}/claude/settings.json${NC}"
+        else
+            curl -sSL "${EC_RAW_URL}/claude/settings.json" \
+                -o .claude/settings.json
+        fi
     fi
 
     # Add EC section to CLAUDE.md
@@ -254,52 +309,45 @@ if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
     fi
 fi
 
-# Download generic instructions
-echo -e "${YELLOW}Downloading AI assistant instructions...${NC}"
-curl -sSL "${EC_RAW_URL}/INSTRUCTIONS.md" -o "$ENGRAM_DIR/INSTRUCTIONS.md"
-
-echo ""
-echo -e "${CYAN}=== AI Assistant Instructions ===${NC}"
-echo ""
-echo "For AI assistants other than Claude Code, add the contents of"
-echo "~/.engram/INSTRUCTIONS.md to your project's instruction file:"
-echo ""
-echo "  Cursor:        .cursor/rules/engram.mdc"
-echo "  GitHub Copilot: .github/copilot-instructions.md"
-echo "  Gemini:        GEMINI.md"
-echo "  Generic:       AGENTS.md"
-echo ""
-
 # Create Docker network if it doesn't exist
 if ! docker network inspect engram-network &> /dev/null; then
     echo -e "${YELLOW}Creating Docker network...${NC}"
     docker network create engram-network
 fi
 
-# One-time migration: clean up orphaned EC containers from before lifecycle management
-# These are unlabeled containers running the EC image that predate the wrapper script
+# Clean up orphaned EC containers (labeled or legacy unlabeled)
 echo -e "${YELLOW}Checking for orphaned EC containers...${NC}"
+LABELED_STALE=$(docker ps -a \
+    --filter "label=io.engram-cogitator.role=mcp-server" \
+    --filter "status=exited" --filter "status=dead" --filter "status=created" \
+    --format '{{.ID}} {{.Names}}' 2>/dev/null) || true
 ORPHANED=$(docker ps -a --filter "ancestor=${EC_IMAGE}" --format '{{.ID}} {{.Names}}' 2>/dev/null | grep -v 'ec-mcp-\|ec-hook-' || true)
-if [ -n "$ORPHANED" ]; then
-    echo -e "${YELLOW}Found orphaned (pre-wrapper) EC containers:${NC}"
-    echo "$ORPHANED" | while read -r cid cname; do
+ALL_STALE=$(printf '%s\n%s' "$LABELED_STALE" "$ORPHANED" | sort -u | grep -v '^$' || true)
+if [ -n "$ALL_STALE" ]; then
+    echo -e "${YELLOW}Found stale EC containers:${NC}"
+    echo "$ALL_STALE" | while read -r cid cname; do
         echo -e "  Removing: ${cname} (${cid})"
         docker rm -f "$cid" &>/dev/null || true
     done
-    echo -e "${GREEN}Orphaned containers cleaned up.${NC}"
+    echo -e "${GREEN}Stale containers cleaned up.${NC}"
 else
-    echo -e "${GREEN}No orphaned containers found.${NC}"
+    echo -e "${GREEN}No stale containers found.${NC}"
 fi
 echo ""
 
 # Start Ollama container if not running
 if ! docker ps --format '{{.Names}}' | grep -q '^engram-ollama$'; then
     echo -e "${YELLOW}Starting Ollama container...${NC}"
-    docker run -d \
-        --name engram-ollama \
-        --network engram-network \
-        -v ollama_data:/root/.ollama \
-        ${OLLAMA_IMAGE}
+    # Check if stopped container exists
+    if docker ps -a --format '{{.Names}}' | grep -q '^engram-ollama$'; then
+        docker start engram-ollama
+    else
+        docker run -d \
+            --name engram-ollama \
+            --network engram-network \
+            -v ollama_data:/root/.ollama \
+            ${OLLAMA_IMAGE}
+    fi
 
     echo -e "${YELLOW}Waiting for Ollama to start...${NC}"
     sleep 5
@@ -310,31 +358,48 @@ echo -e "${YELLOW}Pulling embedding model (${EMBEDDING_MODEL})...${NC}"
 docker exec engram-ollama ollama pull ${EMBEDDING_MODEL}
 
 echo ""
-echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║     Installation Complete!                ║${NC}"
-echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
-echo ""
-echo "Engram Cogitator is now configured."
-echo ""
-echo "What's installed:"
-echo "  - Docker containers (Ollama + EC)"
-echo "  - Global storage at ~/.engram/memory.db"
-if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
-echo "  - ec:remember skill in .claude/skills/"
-echo "  - Session-start hook in .claude/hooks/"
-echo "  - EC section in CLAUDE.md"
+if [ "$IS_UPDATE" = true ]; then
+    echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║     Update Complete!                      ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
+    echo ""
+    echo "Updated:"
+    echo "  - EC Docker image (latest)"
+    echo "  - Container lifecycle wrapper (~/.engram/ec-run.sh)"
+    echo "  - MCP server registration"
+    if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
+    echo "  - EC skill + session-start hook"
+    fi
+    echo ""
+    echo -e "${YELLOW}Restart your AI coding assistant to use the new version.${NC}"
+else
+    echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║     Installation Complete!                ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
+    echo ""
+    echo "Engram Cogitator is now configured."
+    echo ""
+    echo "What's installed:"
+    echo "  - Docker containers (Ollama + EC)"
+    echo "  - Global storage at ~/.engram/memory.db"
+    if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
+    echo "  - ec:remember skill in .claude/skills/"
+    echo "  - Session-start hook in .claude/hooks/"
+    echo "  - EC section in CLAUDE.md"
+    fi
+    echo ""
+    echo "MCP tools available:"
+    echo "  - ec_add        : Store a memory"
+    echo "  - ec_search     : Find relevant memories"
+    echo "  - ec_list       : List recent memories"
+    echo "  - ec_invalidate : Soft-delete a memory"
+    echo ""
+    echo -e "${YELLOW}Restart your AI coding assistant to activate.${NC}"
 fi
-echo ""
-echo "MCP tools available:"
-echo "  - ec_add        : Store a memory"
-echo "  - ec_search     : Find relevant memories"
-echo "  - ec_list       : List recent memories"
-echo "  - ec_invalidate : Soft-delete a memory"
-echo ""
-echo -e "${YELLOW}Restart your AI coding assistant to activate.${NC}"
 echo ""
 echo "Commands:"
 echo "  docker start engram-ollama     Start Ollama if stopped"
+echo "  ./install.sh                   Update to latest version"
 echo "  ./install.sh --init            Add skills/hooks to a new project"
 echo "  ./uninstall.sh                 Remove EC from this project"
 echo ""
