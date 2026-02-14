@@ -3,7 +3,9 @@
 # Manages container lifecycle: naming, labeling, signal trapping, stale pruning.
 # Replaces raw `docker run -i --rm` as the MCP stdio entry point.
 
-set -euo pipefail
+set -uo pipefail
+# No set -e: this is a long-running wrapper and we don't want transient
+# docker errors (daemon hiccups, network blips) to kill the MCP session.
 
 EC_IMAGE="ghcr.io/merewhiplash/engram-cogitator:latest"
 if ! docker image inspect "$EC_IMAGE" &>/dev/null; then
@@ -95,5 +97,7 @@ docker run -i \
     --db-path /data/memory.db \
     --repo "$PROJECT_DIR" \
     --ollama-url http://engram-ollama:11434
+DOCKER_EXIT=$?
 
 # The exit trap handles cleanup regardless of how we get here.
+exit $DOCKER_EXIT
