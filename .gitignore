@@ -17,6 +17,8 @@ tui
 
 # Build artifacts
 /server
+/api
+/shim
 
 # Local MCP config
 .mcp.json
