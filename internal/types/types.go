@@ -48,6 +48,8 @@ type Memory struct {
 	IsValid      bool       `json:"is_valid"`
 	SupersededBy *int64     `json:"superseded_by,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
+	// Search result fields (only populated by Search, not List/Add)
+	SimilarityScore float64 `json:"similarity_score,omitempty"`
 	// Team mode fields (optional, empty for solo mode)
 	AuthorName  string `json:"author_name,omitempty"`
 	AuthorEmail string `json:"author_email,omitempty"`

@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -44,7 +43,6 @@ func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input mcpty
 	var err error
 
 	if h.repo != "" {
-		// Global mode: inject project context
 		memory, err = h.svc.AddWithContext(ctx, service.AddParams{
 			Type:      input.Type,
 			Area:      input.Area,
@@ -53,7 +51,6 @@ func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input mcpty
 			Repo:      h.repo,
 		})
 	} else {
-		// Legacy mode: per-project DB, no repo tag
 		memory, err = h.svc.Add(ctx, types.MemoryType(input.Type), input.Area, input.Content, input.Rationale)
 	}
 
@@ -61,11 +58,11 @@ func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input mcpty
 		return mcptypes.ErrorResult(fmt.Sprintf("failed to store memory: %v", err)), mcptypes.AddOutput{}, nil
 	}
 
-	result, err := json.MarshalIndent(memory, "", "  ")
-	if err != nil {
-		return mcptypes.ErrorResult(fmt.Sprintf("failed to format response: %v", err)), mcptypes.AddOutput{}, nil
+	result, fmtErr := mcptypes.MemoryAddedResult(memory)
+	if fmtErr != nil {
+		return mcptypes.ErrorResult(fmtErr.Error()), mcptypes.AddOutput{}, nil
 	}
-	return mcptypes.TextResult(fmt.Sprintf("Memory added successfully:\n%s", string(result))), mcptypes.AddOutput{Memory: memory}, nil
+	return result, mcptypes.AddOutput{Memory: memory}, nil
 }
 
 func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input mcptypes.SearchInput) (*mcp.CallToolResult, mcptypes.SearchOutput, error) {
@@ -73,19 +70,14 @@ func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input mc
 		return mcptypes.ErrorResult("query is required"), mcptypes.SearchOutput{}, nil
 	}
 
-	limit := input.Limit
-	if limit <= 0 {
-		limit = 5
-	}
+	limit := mcptypes.DefaultSearchLimit(input.Limit)
 
 	var memories []types.Memory
 	var err error
 
 	if h.repo != "" {
-		// Global mode: filter by current project
 		memories, err = h.svc.SearchWithRepo(ctx, input.Query, limit, input.Type, input.Area, h.repo)
 	} else {
-		// Legacy mode: per-project DB, no filter
 		memories, err = h.svc.Search(ctx, input.Query, limit, types.MemoryType(input.Type), input.Area)
 	}
 
@@ -93,15 +85,14 @@ func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input mc
 		return mcptypes.ErrorResult(fmt.Sprintf("failed to search: %v", err)), mcptypes.SearchOutput{}, nil
 	}
 
-	if len(memories) == 0 {
-		return mcptypes.TextResult("No matching memories found."), mcptypes.SearchOutput{Memories: []types.Memory{}}, nil
+	result, fmtErr := mcptypes.MemoriesResult(memories, "No matching memories found.")
+	if fmtErr != nil {
+		return mcptypes.ErrorResult(fmtErr.Error()), mcptypes.SearchOutput{}, nil
 	}
-
-	result, err := json.MarshalIndent(memories, "", "  ")
-	if err != nil {
-		return mcptypes.ErrorResult(fmt.Sprintf("failed to format response: %v", err)), mcptypes.SearchOutput{}, nil
+	if memories == nil {
+		memories = []types.Memory{}
 	}
-	return mcptypes.TextResult(string(result)), mcptypes.SearchOutput{Memories: memories}, nil
+	return result, mcptypes.SearchOutput{Memories: memories}, nil
 }
 
 func (h *Handler) Invalidate(ctx context.Context, req *mcp.CallToolRequest, input mcptypes.InvalidateInput) (*mcp.CallToolResult, mcptypes.InvalidateOutput, error) {
@@ -118,28 +109,19 @@ func (h *Handler) Invalidate(ctx context.Context, req *mcp.CallToolRequest, inpu
 		return mcptypes.ErrorResult(fmt.Sprintf("failed to invalidate: %v", err)), mcptypes.InvalidateOutput{}, nil
 	}
 
-	msg := fmt.Sprintf("Memory %d has been invalidated.", input.ID)
-	if supersededBy != nil {
-		msg += fmt.Sprintf(" Superseded by memory %d.", *supersededBy)
-	}
-
+	msg := mcptypes.InvalidateMsg(input.ID, supersededBy)
 	return mcptypes.TextResult(msg), mcptypes.InvalidateOutput{Message: msg}, nil
 }
 
 func (h *Handler) List(ctx context.Context, req *mcp.CallToolRequest, input mcptypes.ListInput) (*mcp.CallToolResult, mcptypes.ListOutput, error) {
-	limit := input.Limit
-	if limit <= 0 {
-		limit = 10
-	}
+	limit := mcptypes.DefaultListLimit(input.Limit)
 
 	var memories []types.Memory
 	var err error
 
 	if h.repo != "" {
-		// Global mode: filter by current project
 		memories, err = h.svc.ListWithRepo(ctx, limit, input.Type, input.Area, h.repo, input.IncludeInvalid, 0)
 	} else {
-		// Legacy mode: per-project DB, no filter
 		memories, err = h.svc.List(ctx, limit, types.MemoryType(input.Type), input.Area, input.IncludeInvalid)
 	}
 
@@ -147,13 +129,12 @@ func (h *Handler) List(ctx context.Context, req *mcp.CallToolRequest, input mcpt
 		return mcptypes.ErrorResult(fmt.Sprintf("failed to list: %v", err)), mcptypes.ListOutput{}, nil
 	}
 
-	if len(memories) == 0 {
-		return mcptypes.TextResult("No memories found."), mcptypes.ListOutput{Memories: []types.Memory{}}, nil
+	result, fmtErr := mcptypes.MemoriesResult(memories, "No memories found.")
+	if fmtErr != nil {
+		return mcptypes.ErrorResult(fmtErr.Error()), mcptypes.ListOutput{}, nil
 	}
-
-	result, err := json.MarshalIndent(memories, "", "  ")
-	if err != nil {
-		return mcptypes.ErrorResult(fmt.Sprintf("failed to format response: %v", err)), mcptypes.ListOutput{}, nil
+	if memories == nil {
+		memories = []types.Memory{}
 	}
-	return mcptypes.TextResult(string(result)), mcptypes.ListOutput{Memories: memories}, nil
+	return result, mcptypes.ListOutput{Memories: memories}, nil
 }

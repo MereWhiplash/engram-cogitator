@@ -4,6 +4,9 @@
 package mcptypes
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/MereWhiplash/engram-cogitator/internal/types"
@@ -72,6 +75,52 @@ func ErrorResult(msg string) *mcp.CallToolResult {
 		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
 		IsError: true,
 	}
+}
+
+// DefaultSearchLimit returns a default limit for search operations
+func DefaultSearchLimit(limit int) int {
+	if limit <= 0 {
+		return 5
+	}
+	return limit
+}
+
+// DefaultListLimit returns a default limit for list operations
+func DefaultListLimit(limit int) int {
+	if limit <= 0 {
+		return 10
+	}
+	return limit
+}
+
+// MemoryAddedResult formats a successful add response
+func MemoryAddedResult(memory *types.Memory) (*mcp.CallToolResult, error) {
+	result, err := json.MarshalIndent(memory, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to format response: %w", err)
+	}
+	return TextResult(fmt.Sprintf("Memory added successfully:\n%s", string(result))), nil
+}
+
+// MemoriesResult formats a list of memories or an empty message
+func MemoriesResult(memories []types.Memory, emptyMsg string) (*mcp.CallToolResult, error) {
+	if len(memories) == 0 {
+		return TextResult(emptyMsg), nil
+	}
+	result, err := json.MarshalIndent(memories, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to format response: %w", err)
+	}
+	return TextResult(string(result)), nil
+}
+
+// InvalidateMsg builds the invalidation confirmation message
+func InvalidateMsg(id int64, supersededBy *int64) string {
+	msg := fmt.Sprintf("Memory %d has been invalidated.", id)
+	if supersededBy != nil {
+		msg += fmt.Sprintf(" Superseded by memory %d.", *supersededBy)
+	}
+	return msg
 }
 
 // Tool definitions (shared between server and shim)

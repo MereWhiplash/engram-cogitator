@@ -137,7 +137,8 @@ func (p *Postgres) Search(ctx context.Context, embedding []float32, opts types.S
 
 	query := `
 		SELECT m.id, m.type, m.area, m.content, m.rationale, m.is_valid,
-		       m.superseded_by, m.created_at, m.author_name, m.author_email, m.repo
+		       m.superseded_by, m.created_at, m.author_name, m.author_email, m.repo,
+		       (e.embedding <=> $1) AS distance
 		FROM memories m
 		JOIN memory_embeddings e ON m.id = e.memory_id
 		WHERE m.is_valid = TRUE
@@ -161,10 +162,10 @@ func (p *Postgres) Search(ctx context.Context, embedding []float32, opts types.S
 		argNum++
 	}
 
-	query += fmt.Sprintf(" ORDER BY e.embedding <=> $1 LIMIT $%d", argNum)
+	query += fmt.Sprintf(" ORDER BY distance LIMIT $%d", argNum)
 	args = append(args, limit)
 
-	return p.queryMemories(ctx, query, args...)
+	return p.queryMemoriesWithScore(ctx, query, args...)
 }
 
 func (p *Postgres) List(ctx context.Context, opts types.ListOpts) ([]types.Memory, error) {
@@ -231,6 +232,43 @@ func (p *Postgres) Invalidate(ctx context.Context, id int64, supersededBy *int64
 	}
 
 	return nil
+}
+
+func (p *Postgres) queryMemoriesWithScore(ctx context.Context, query string, args ...interface{}) ([]types.Memory, error) {
+	rows, err := p.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var memories []types.Memory
+	for rows.Next() {
+		var m types.Memory
+		var memType string
+		var supersededBy *int64
+		var rationale *string
+		var distance float64
+
+		err := rows.Scan(
+			&m.ID, &memType, &m.Area, &m.Content, &rationale, &m.IsValid,
+			&supersededBy, &m.CreatedAt, &m.AuthorName, &m.AuthorEmail, &m.Repo,
+			&distance,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		m.Type = types.MemoryType(memType)
+		if rationale != nil {
+			m.Rationale = *rationale
+		}
+		m.SupersededBy = supersededBy
+		m.SimilarityScore = 1 - distance
+
+		memories = append(memories, m)
+	}
+
+	return memories, rows.Err()
 }
 
 func (p *Postgres) queryMemories(ctx context.Context, query string, args ...interface{}) ([]types.Memory, error) {

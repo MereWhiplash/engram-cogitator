@@ -136,12 +136,13 @@ func (s *SQLite) Search(ctx context.Context, embedding []float32, opts types.Sea
 
 	query := `
 		SELECT m.id, m.type, m.area, m.content, m.rationale, m.is_valid,
-		       m.superseded_by, m.created_at, m.author_name, m.author_email, m.repo
+		       m.superseded_by, m.created_at, m.author_name, m.author_email, m.repo,
+		       vec_distance_cosine(e.embedding, ?) AS distance
 		FROM memories m
 		JOIN memory_embeddings e ON m.id = e.memory_id
 		WHERE m.is_valid = TRUE
 	`
-	args := []interface{}{}
+	args := []interface{}{string(embeddingJSON)}
 
 	if opts.Type != "" {
 		query += " AND m.type = ?"
@@ -157,12 +158,12 @@ func (s *SQLite) Search(ctx context.Context, embedding []float32, opts types.Sea
 	}
 
 	query += `
-		ORDER BY vec_distance_cosine(e.embedding, ?)
+		ORDER BY distance
 		LIMIT ?
 	`
-	args = append(args, string(embeddingJSON), limit)
+	args = append(args, limit)
 
-	return s.queryMemories(ctx, query, args...)
+	return s.queryMemoriesWithScore(ctx, query, args...)
 }
 
 func (s *SQLite) List(ctx context.Context, opts types.ListOpts) ([]types.Memory, error) {
@@ -228,6 +229,46 @@ func (s *SQLite) Invalidate(ctx context.Context, id int64, supersededBy *int64) 
 	}
 
 	return nil
+}
+
+func (s *SQLite) queryMemoriesWithScore(ctx context.Context, query string, args ...interface{}) ([]types.Memory, error) {
+	rows, err := s.conn.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var memories []types.Memory
+	for rows.Next() {
+		var m types.Memory
+		var memType string
+		var supersededBy sql.NullInt64
+		var rationale sql.NullString
+		var distance float64
+
+		err := rows.Scan(
+			&m.ID, &memType, &m.Area, &m.Content, &rationale, &m.IsValid,
+			&supersededBy, &m.CreatedAt, &m.AuthorName, &m.AuthorEmail, &m.Repo,
+			&distance,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		m.Type = types.MemoryType(memType)
+		if rationale.Valid {
+			m.Rationale = rationale.String
+		}
+		if supersededBy.Valid {
+			m.SupersededBy = &supersededBy.Int64
+		}
+		// Convert cosine distance to similarity: 1 - distance
+		m.SimilarityScore = 1 - distance
+
+		memories = append(memories, m)
+	}
+
+	return memories, rows.Err()
 }
 
 func (s *SQLite) queryMemories(ctx context.Context, query string, args ...interface{}) ([]types.Memory, error) {

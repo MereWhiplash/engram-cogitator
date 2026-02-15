@@ -35,8 +35,9 @@ type memoryDoc struct {
 		Name  string `bson:"name"`
 		Email string `bson:"email"`
 	} `bson:"author"`
-	Repo      string    `bson:"repo"`
-	Embedding []float32 `bson:"embedding"`
+	Repo            string    `bson:"repo"`
+	Embedding       []float32 `bson:"embedding"`
+	SimilarityScore float64   `bson:"similarity_score,omitempty"`
 }
 
 // NewMongoDB creates a new MongoDB storage
@@ -183,6 +184,11 @@ func (m *MongoDB) Search(ctx context.Context, embedding []float32, opts types.Se
 			{Key: "limit", Value: limit},
 			{Key: "filter", Value: filter},
 		}}},
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "similarity_score", Value: bson.D{
+				{Key: "$meta", Value: "vectorSearchScore"},
+			}},
+		}}},
 	}
 
 	cursor, err := m.memories.Aggregate(ctx, pipeline)
@@ -193,7 +199,7 @@ func (m *MongoDB) Search(ctx context.Context, embedding []float32, opts types.Se
 	}
 	defer cursor.Close(ctx)
 
-	return m.cursorToMemories(ctx, cursor)
+	return m.cursorToMemoriesWithScore(ctx, cursor)
 }
 
 func (m *MongoDB) listFallback(ctx context.Context, opts types.SearchOpts) ([]types.Memory, error) {
@@ -258,6 +264,33 @@ func (m *MongoDB) Invalidate(ctx context.Context, id int64, supersededBy *int64)
 	}
 
 	return nil
+}
+
+func (m *MongoDB) cursorToMemoriesWithScore(ctx context.Context, cursor *mongo.Cursor) ([]types.Memory, error) {
+	var memories []types.Memory
+	for cursor.Next(ctx) {
+		var doc memoryDoc
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, err
+		}
+
+		memories = append(memories, types.Memory{
+			ID:              doc.ID,
+			Type:            types.MemoryType(doc.Type),
+			Area:            doc.Area,
+			Content:         doc.Content,
+			Rationale:       doc.Rationale,
+			IsValid:         doc.IsValid,
+			SupersededBy:    doc.SupersededBy,
+			CreatedAt:       doc.CreatedAt,
+			AuthorName:      doc.Author.Name,
+			AuthorEmail:     doc.Author.Email,
+			Repo:            doc.Repo,
+			SimilarityScore: doc.SimilarityScore,
+		})
+	}
+
+	return memories, cursor.Err()
 }
 
 func (m *MongoDB) cursorToMemories(ctx context.Context, cursor *mongo.Cursor) ([]types.Memory, error) {

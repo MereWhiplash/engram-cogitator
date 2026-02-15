@@ -3,10 +3,22 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
+	"sort"
+	"time"
 
 	"github.com/MereWhiplash/engram-cogitator/internal/embedder"
 	"github.com/MereWhiplash/engram-cogitator/internal/storage"
 	"github.com/MereWhiplash/engram-cogitator/internal/types"
+)
+
+const (
+	// recencyWeight controls how much recency affects ranking (0.0 = pure similarity, 1.0 = pure recency)
+	recencyWeight = 0.15
+	// recencyHalfLifeDays is the number of days after which recency boost decays to 50%
+	recencyHalfLifeDays = 30.0
+	// searchOverfetch multiplier — fetch extra results for re-ranking
+	searchOverfetch = 2
 )
 
 // Service contains the business logic for memory operations
@@ -50,7 +62,7 @@ func (s *Service) Add(ctx context.Context, memType types.MemoryType, area, conte
 	return s.storage.Add(ctx, mem, embedding)
 }
 
-// Search finds memories by semantic similarity
+// Search finds memories by semantic similarity with recency boost
 func (s *Service) Search(ctx context.Context, query string, limit int, memType types.MemoryType, area string) ([]types.Memory, error) {
 	embedding, err := s.embedder.EmbedForSearch(query)
 	if err != nil {
@@ -58,12 +70,17 @@ func (s *Service) Search(ctx context.Context, query string, limit int, memType t
 	}
 
 	opts := types.SearchOpts{
-		Limit: limit,
+		Limit: limit * searchOverfetch,
 		Type:  memType,
 		Area:  area,
 	}
 
-	return s.storage.Search(ctx, embedding, opts)
+	memories, err := s.storage.Search(ctx, embedding, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return applyRecencyBoost(memories, limit), nil
 }
 
 // List returns recent memories
@@ -129,7 +146,7 @@ func (s *Service) AddWithContext(ctx context.Context, params AddParams) (*types.
 	return s.storage.Add(ctx, mem, embedding)
 }
 
-// SearchWithRepo finds memories with optional repo filter
+// SearchWithRepo finds memories with optional repo filter and recency boost
 func (s *Service) SearchWithRepo(ctx context.Context, query string, limit int, memType, area, repo string) ([]types.Memory, error) {
 	embedding, err := s.embedder.EmbedForSearch(query)
 	if err != nil {
@@ -137,13 +154,43 @@ func (s *Service) SearchWithRepo(ctx context.Context, query string, limit int, m
 	}
 
 	opts := types.SearchOpts{
-		Limit: limit,
+		Limit: limit * searchOverfetch,
 		Type:  types.MemoryType(memType),
 		Area:  area,
 		Repo:  repo,
 	}
 
-	return s.storage.Search(ctx, embedding, opts)
+	memories, err := s.storage.Search(ctx, embedding, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return applyRecencyBoost(memories, limit), nil
+}
+
+// applyRecencyBoost re-ranks search results using a hybrid of similarity and recency.
+// Results must already have SimilarityScore populated by the storage layer.
+func applyRecencyBoost(memories []types.Memory, limit int) []types.Memory {
+	if len(memories) == 0 {
+		return memories
+	}
+
+	now := time.Now()
+	for i := range memories {
+		similarity := memories[i].SimilarityScore
+		ageDays := now.Sub(memories[i].CreatedAt).Hours() / 24
+		recency := math.Exp(-ageDays * math.Ln2 / recencyHalfLifeDays)
+		memories[i].SimilarityScore = similarity*(1-recencyWeight) + recency*recencyWeight
+	}
+
+	sort.Slice(memories, func(i, j int) bool {
+		return memories[i].SimilarityScore > memories[j].SimilarityScore
+	})
+
+	if len(memories) > limit {
+		memories = memories[:limit]
+	}
+	return memories
 }
 
 // ListWithRepo returns memories with optional repo filter
