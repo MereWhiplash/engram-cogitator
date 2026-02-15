@@ -1,6 +1,6 @@
 ---
 name: writing-plans
-description: Creates detailed implementation plans with TDD steps from design documents. Searches EC for relevant patterns. Use after brainstorming to write an implementation plan.
+description: Creates detailed TDD-first implementation plans from design documents. Every task follows red-green-refactor. Searches EC for relevant patterns. Use after brainstorming to write an implementation plan.
 ---
 
 # Writing Plans

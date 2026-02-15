@@ -169,4 +169,4 @@ ec_add:
 After saving:
 > "Design saved to `docs/designs/YYYY-MM-DD-<topic>.md`. Ready to create the implementation plan?"
 
-If yes → **Use @writing-plans**
+If yes → **Use @writing-plans** (all tasks will follow **@tdd** red-green-refactor)

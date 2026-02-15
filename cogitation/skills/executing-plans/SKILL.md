@@ -1,13 +1,20 @@
 ---
 name: executing-plans
-description: Executes implementation plans in batches with review checkpoints. Loads EC context before each batch. Use when ready to implement a plan from docs/plans/.
+description: Executes TDD implementation plans in batches with review checkpoints. Each task follows @tdd red-green-refactor. Loads EC context before each batch. Use when ready to implement a plan from docs/plans/.
 ---
 
 # Executing Plans
 
-Execute plans in batches with review checkpoints.
+Execute plans in TDD batches with review checkpoints.
 
 **Announce:** "I'm using the executing-plans skill to implement this plan."
+
+## The Rule
+
+```
+Every task follows @tdd: RED → GREEN → REFACTOR
+No production code without a failing test first.
+```
 
 ## Prerequisites
 
@@ -97,11 +104,14 @@ If Tasks aren't available, create a TodoWrite with all batches and update as you
 
 ### Main Thread Execution
 
-For each task:
+For each task, follow **@tdd**:
 1. Mark batch as `in_progress` (TaskUpdate if using Tasks, otherwise TodoWrite)
-2. Follow each step exactly as written (tasks marked `@tdd` use that skill)
-3. Run verifications as specified (`@verifying`)
-4. Mark as `completed` when batch passes verification
+2. **RED:** Write a failing test for the behavior this task introduces
+3. **GREEN:** Write minimal production code to make it pass
+4. **REFACTOR:** Clean up while keeping tests green
+5. Run full verifications as specified (`@verifying`)
+6. Commit after each task passes
+7. Mark as `completed` when batch passes verification
 
 ### Subagent Execution
 
@@ -112,7 +122,8 @@ Execute tasks X-Y from this plan:
 [Paste relevant task sections from plan]
 
 Requirements:
-- Follow @tdd for each task (RED → GREEN → REFACTOR)
+- EVERY task follows @tdd: write failing test FIRST, then minimal code to pass, then refactor
+- No production code without a failing test — if you can't test it, stop and report
 - Use @verifying before claiming any step complete
 - Commit after each task
 - Stop and report if any verification fails
@@ -123,6 +134,7 @@ EC Context:
 
 Return:
 - Summary of what was implemented
+- Tests written and their status
 - Files created/modified
 - Any issues or blockers encountered
 ```
