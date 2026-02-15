@@ -144,25 +144,45 @@ The Engram Cogitator serves as an auxiliary memory core for your AI coding sessi
 | **Learnings** | Hard-won knowledge from debugging sessions      |
 | **Patterns**  | Recurring solutions and team conventions        |
 
-All memories are searchable by semantic similarity. Ask "how do we handle auth?" and it finds relevant memories even if they don't contain the word "auth".
+All memories are searchable by semantic similarity. Ask "how do we handle auth?" and it finds relevant memories even if they don't contain the word "auth". Search results include a `similarity_score` (0-1) and are boosted by recency so recent memories surface higher.
 
 ---
 
 ## Two Modes
 
-|              | Solo Mode                   | Team Mode                        |
-| ------------ | --------------------------- | -------------------------------- |
-| **For**      | Individual developers       | Engineering teams                |
-| **Storage**  | Local SQLite per project    | Shared Postgres/MongoDB          |
-| **Memories** | Private to you              | Shared across team               |
-| **Setup**    | One command                 | Kubernetes + Helm                |
-| **Best for** | Personal projects, learning | Cross-pollinating team knowledge |
+|              | Solo Mode                             | Team Mode                        |
+| ------------ | ------------------------------------- | -------------------------------- |
+| **For**      | Individual developers or small teams  | Engineering teams at scale       |
+| **Storage**  | SQLite (default), Postgres, or MongoDB | Shared Postgres/MongoDB          |
+| **Memories** | Private (or shared via `--db-path`)   | Shared across team               |
+| **Setup**    | One command                           | Kubernetes + Helm                |
+| **Best for** | Personal projects, small teams        | Cross-pollinating team knowledge |
 
 ---
 
 ## Solo Mode
 
-Your memories stay local in a single global database at `~/.engram/memory.db`. Each project is automatically identified by its git remote (or directory path as fallback), so memories are scoped to the current project but searchable across all projects. No data leaves your machine.
+Your memories stay local in a single global database at `~/.engram/memory.db` by default. Each project is automatically identified by its git remote (or directory path as fallback), so memories are scoped to the current project but searchable across all projects. No data leaves your machine.
+
+### Custom Database Location
+
+The installer auto-detects your storage backend from the `--db-path` value:
+
+```bash
+# SQLite (default)
+./install.sh
+./install.sh --db-path /shared/team/memory.db
+
+# PostgreSQL (auto-detected from postgres:// or postgresql://)
+./install.sh --db-path postgres://user:pass@host:5432/engram
+
+# MongoDB (auto-detected from mongodb:// or mongodb+srv://)
+./install.sh --db-path mongodb://host:27017/engram
+```
+
+Config is persisted to `~/.engram/config` and survives updates. The wrapper script reads it on every MCP session start.
+
+This is useful for teams sharing a database without the full Kubernetes team mode setup — just point everyone at the same Postgres or MongoDB instance.
 
 ### Architecture
 
@@ -418,12 +438,12 @@ ingress:
 
 ## MCP Tools Reference
 
-| Tool            | Purpose                 | Example                                         |
-| --------------- | ----------------------- | ----------------------------------------------- |
-| `ec_add`        | Store a memory          | "Remember that we use UUIDs for all entity IDs" |
-| `ec_search`     | Find relevant memories  | "How do we handle authentication?"              |
-| `ec_list`       | Show recent memories    | "What did we decide recently?"                  |
-| `ec_invalidate` | Mark memory as outdated | "That decision about Redux is no longer valid"  |
+| Tool            | Purpose                                          | Example                                         |
+| --------------- | ------------------------------------------------ | ----------------------------------------------- |
+| `ec_add`        | Store a memory                                   | "Remember that we use UUIDs for all entity IDs" |
+| `ec_search`     | Find relevant memories (returns similarity score) | "How do we handle authentication?"              |
+| `ec_list`       | Show recent memories                             | "What did we decide recently?"                  |
+| `ec_invalidate` | Mark memory as outdated                          | "That decision about Redux is no longer valid"  |
 
 ### Memory Types
 
