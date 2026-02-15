@@ -10,6 +10,7 @@ NC='\033[0m' # No Color
 
 ENGRAM_DIR="$HOME/.engram"
 EC_RAW_URL="https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main"
+CUSTOM_DB_PATH=""
 
 # Show help
 show_help() {
@@ -18,10 +19,18 @@ show_help() {
     echo "Usage: install.sh [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  (no args)   Install or update (auto-detected)"
-    echo "  --init      Initialize current project only (deprecated, use marketplace)"
-    echo "  --team      Team mode installation (Kubernetes)"
-    echo "  --help      Show this help message"
+    echo "  (no args)        Install or update (auto-detected)"
+    echo "  --db-path PATH   Database connection (auto-detects type from value)"
+    echo "                   Useful for team mode with shared storage"
+    echo "  --init           Initialize current project only (deprecated, use marketplace)"
+    echo "  --team           Team mode installation (Kubernetes)"
+    echo "  --help           Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  ./install.sh                                                    # Default (SQLite at ~/.engram/memory.db)"
+    echo "  ./install.sh --db-path /shared/team/memory.db                   # SQLite at custom path"
+    echo "  ./install.sh --db-path postgres://user:pass@host:5432/engram    # PostgreSQL"
+    echo "  ./install.sh --db-path mongodb://host:27017/engram              # MongoDB"
     echo ""
     echo "After installation, install the cogitation plugin:"
     echo "  /plugin marketplace add MereWhiplash/engram-cogitator"
@@ -67,26 +76,42 @@ init_project() {
     exit 0
 }
 
-# Check for flags
-case "$1" in
-    --help|-h)
-        show_help
-        exit 0
-        ;;
-    --init)
-        init_project
-        ;;
-    --team)
-        # Delegate to install-team.sh
-        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        if [ -f "$SCRIPT_DIR/install-team.sh" ]; then
-            exec "$SCRIPT_DIR/install-team.sh"
-        else
-            echo -e "${YELLOW}Downloading team mode installer...${NC}"
-            exec bash <(curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install-team.sh)
-        fi
-        ;;
-esac
+# Parse flags
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        --init)
+            init_project
+            ;;
+        --team)
+            # Delegate to install-team.sh
+            SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+            if [ -f "$SCRIPT_DIR/install-team.sh" ]; then
+                exec "$SCRIPT_DIR/install-team.sh"
+            else
+                echo -e "${YELLOW}Downloading team mode installer...${NC}"
+                exec bash <(curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/install-team.sh)
+            fi
+            ;;
+        --db-path)
+            shift
+            if [ -z "$1" ] || [[ "$1" == --* ]]; then
+                echo -e "${RED}Error: --db-path requires a path argument${NC}"
+                exit 1
+            fi
+            CUSTOM_DB_PATH="$1"
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            show_help
+            exit 1
+            ;;
+    esac
+    shift
+done
 
 EC_VERSION="latest"
 EC_IMAGE="ghcr.io/merewhiplash/engram-cogitator:${EC_VERSION}"
@@ -130,6 +155,44 @@ fi
 if [ ! -d "$ENGRAM_DIR" ]; then
     echo -e "${YELLOW}Creating ~/.engram directory...${NC}"
     mkdir -p "$ENGRAM_DIR"
+fi
+
+# Save custom DB config if provided (auto-detect driver from value)
+if [ -n "$CUSTOM_DB_PATH" ]; then
+    case "$CUSTOM_DB_PATH" in
+        postgres://*|postgresql://*)
+            echo -e "${YELLOW}Detected PostgreSQL connection${NC}"
+            echo -e "${YELLOW}  DSN: ${CUSTOM_DB_PATH}${NC}"
+            cat > "$ENGRAM_DIR/config" <<CONF
+EC_STORAGE_DRIVER=postgres
+EC_POSTGRES_DSN=${CUSTOM_DB_PATH}
+CONF
+            ;;
+        mongodb://*|mongodb+srv://*)
+            echo -e "${YELLOW}Detected MongoDB connection${NC}"
+            echo -e "${YELLOW}  URI: ${CUSTOM_DB_PATH}${NC}"
+            cat > "$ENGRAM_DIR/config" <<CONF
+EC_STORAGE_DRIVER=mongodb
+EC_MONGODB_URI=${CUSTOM_DB_PATH}
+CONF
+            ;;
+        *)
+            echo -e "${YELLOW}Using SQLite database: ${CUSTOM_DB_PATH}${NC}"
+            CUSTOM_DB_DIR="$(dirname "$CUSTOM_DB_PATH")"
+            if [ ! -d "$CUSTOM_DB_DIR" ]; then
+                echo -e "${YELLOW}Creating database directory: ${CUSTOM_DB_DIR}${NC}"
+                mkdir -p "$CUSTOM_DB_DIR"
+            fi
+            cat > "$ENGRAM_DIR/config" <<CONF
+EC_STORAGE_DRIVER=sqlite
+EC_DB_PATH=${CUSTOM_DB_PATH}
+CONF
+            ;;
+    esac
+    echo -e "${GREEN}Saved to ~/.engram/config${NC}"
+elif [ -f "$ENGRAM_DIR/config" ]; then
+    # Preserve existing config on updates
+    echo -e "${CYAN}Using existing config from ~/.engram/config${NC}"
 fi
 
 # Deploy container lifecycle wrapper script
@@ -187,7 +250,20 @@ if [ "$IS_UPDATE" = false ]; then
     echo ""
     echo -e "${CYAN}=== MCP Configuration ===${NC}"
     echo ""
-    echo -e "${YELLOW}Global mode:${NC} All memories stored in ~/.engram/memory.db"
+    case "$CUSTOM_DB_PATH" in
+        postgres://*|postgresql://*)
+            echo -e "${YELLOW}Database:${NC} PostgreSQL (${CUSTOM_DB_PATH})"
+            ;;
+        mongodb://*|mongodb+srv://*)
+            echo -e "${YELLOW}Database:${NC} MongoDB (${CUSTOM_DB_PATH})"
+            ;;
+        "")
+            echo -e "${YELLOW}Database:${NC} SQLite at ~/.engram/memory.db (default)"
+            ;;
+        *)
+            echo -e "${YELLOW}Database:${NC} SQLite at ${CUSTOM_DB_PATH}"
+            ;;
+    esac
     echo -e "${YELLOW}Project identity:${NC} Auto-detected from git remote or directory path"
     echo ""
 
@@ -351,7 +427,20 @@ else
     echo ""
     echo "What's installed:"
     echo "  - Docker containers (Ollama + EC)"
+    case "$CUSTOM_DB_PATH" in
+        postgres://*|postgresql://*)
+    echo "  - PostgreSQL database"
+            ;;
+        mongodb://*|mongodb+srv://*)
+    echo "  - MongoDB database"
+            ;;
+        "")
     echo "  - Global storage at ~/.engram/memory.db"
+            ;;
+        *)
+    echo "  - SQLite database at ${CUSTOM_DB_PATH}"
+            ;;
+    esac
     if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
     echo "  - EC section in CLAUDE.md"
     fi

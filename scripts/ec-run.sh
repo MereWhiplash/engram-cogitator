@@ -15,6 +15,16 @@ fi
 ENGRAM_DIR="$HOME/.engram"
 LABEL_PREFIX="io.engram-cogitator"
 
+# Load storage config if present
+EC_STORAGE_DRIVER=""
+EC_DB_PATH=""
+EC_POSTGRES_DSN=""
+EC_MONGODB_URI=""
+if [ -f "$ENGRAM_DIR/config" ]; then
+    # shellcheck source=/dev/null
+    . "$ENGRAM_DIR/config"
+fi
+
 # Derive project name from cwd, sanitized for Docker container names
 PROJECT_DIR="$(pwd)"
 PROJECT_SHORT="$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g')"
@@ -82,6 +92,33 @@ trap cleanup EXIT INT TERM HUP
 # (background prune may not have reached it yet), remove it synchronously.
 docker rm -f "$CONTAINER_NAME" &>/dev/null || true
 
+# Build storage flags and volume mount based on configured driver
+VOLUME_ARGS=""
+STORAGE_ARGS=""
+
+case "${EC_STORAGE_DRIVER:-sqlite}" in
+    postgres)
+        # No volume mount needed — connects over network
+        STORAGE_ARGS="--storage-driver postgres --postgres-dsn ${EC_POSTGRES_DSN}"
+        ;;
+    mongodb)
+        # No volume mount needed — connects over network
+        STORAGE_ARGS="--storage-driver mongodb --mongodb-uri ${EC_MONGODB_URI}"
+        ;;
+    *)
+        # SQLite: mount the DB directory into the container
+        if [ -n "$EC_DB_PATH" ]; then
+            DB_HOST_DIR="$(dirname "$EC_DB_PATH")"
+            DB_FILENAME="$(basename "$EC_DB_PATH")"
+            VOLUME_ARGS="-v $DB_HOST_DIR:/data"
+            STORAGE_ARGS="--db-path /data/$DB_FILENAME"
+        else
+            VOLUME_ARGS="-v $ENGRAM_DIR:/data"
+            STORAGE_ARGS="--db-path /data/memory.db"
+        fi
+        ;;
+esac
+
 docker run -i \
     --name "$CONTAINER_NAME" \
     --label "${LABEL_PREFIX}.role=mcp-server" \
@@ -92,9 +129,9 @@ docker run -i \
     --label "${LABEL_PREFIX}.started=${STARTED}" \
     --entrypoint /usr/local/bin/engram-cogitator \
     --network engram-network \
-    -v "$ENGRAM_DIR:/data" \
+    ${VOLUME_ARGS} \
     "$EC_IMAGE" \
-    --db-path /data/memory.db \
+    ${STORAGE_ARGS} \
     --repo "$PROJECT_DIR" \
     --ollama-url http://engram-ollama:11434
 DOCKER_EXIT=$?
