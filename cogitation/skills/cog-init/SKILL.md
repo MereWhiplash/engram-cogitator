@@ -1,6 +1,6 @@
 ---
 name: cog-init
-description: Initialize a project for cogitation workflows. Sets up EC project context, scaffolds directories, and configures project-specific commands.
+description: Use when setting up a project for cogitation for the first time, or the user says "set up cogitation", "init", or "configure this project"
 ---
 
 # Initialize Cogitation

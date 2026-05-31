@@ -1,6 +1,6 @@
 ---
 name: parallel-agents
-description: Dispatches multiple agents for independent tasks that can run concurrently. Searches EC for prior parallelization strategies. Use when facing 2+ independent problems like separate test failures or unrelated bugs.
+description: Use when facing 2+ independent tasks that can run concurrently — separate test failures, unrelated bugs, or parallelizable work
 ---
 
 # Parallel Agents

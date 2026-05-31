@@ -1,6 +1,6 @@
 ---
 name: verifying
-description: Ensures verification commands are run before claiming success. Checks EC for project-specific gotchas. Use before asserting tests pass, builds succeed, or bugs are fixed.
+description: Use before claiming tests pass, a build succeeds, or a bug is fixed
 ---
 
 # Verification
@@ -29,7 +29,7 @@ ec_search:
 Extract: `test_command`, `lint_command`, `build_command`
 
 **If no config:** Use sensible defaults but warn:
-> "No project config found. Using default commands. Consider running @init."
+> "No project config found. Using default commands. Consider running @cog-init."
 
 ## Step 1: Check for Known Gotchas
 

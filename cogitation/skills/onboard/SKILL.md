@@ -1,6 +1,6 @@
 ---
 name: onboard
-description: Get up to speed on an existing project by pulling all stored decisions, learnings, and patterns from EC. Use at the start of a new session, when joining a project, or when user says "catch me up", "what do I need to know", "onboard me".
+description: Use at the start of a session on an existing project, when joining a project, or the user says "catch me up", "what do I need to know", or "onboard me"
 ---
 
 # Onboard to Project
@@ -39,7 +39,7 @@ Extract:
 
 > "This project hasn't been initialized for cogitation. Want me to set it up?"
 
-If yes → **Use @init**
+If yes → **Use @cog-init**
 
 ## Step 3: Pull All Memories
 
@@ -50,6 +50,22 @@ ec_search: type:decision
 ec_search: type:learning
 ec_search: type:pattern
 ```
+
+## Step 3.5: Graphify Structural Recon (STRICT when enabled)
+
+Read `.cogitation/config.json`. **If `graphify.enabled` is `true`, structural recon is REQUIRED — do not skip it.**
+
+1. Ensure a graph exists (the AST build needs no model, no API key):
+   ```bash
+   test -f graphify-out/graph.json || graphify update .
+   ```
+2. Orient on structure:
+   ```bash
+   graphify query "What are the main components and how do they connect?" --budget 800
+   ```
+3. For specific symbols later, use `graphify query "..."` / `graphify explain "<symbol>"`.
+
+The two sources are complementary: **EC** = decisions/gotchas/patterns; **graphify** = code structure/call-graph. Fold both into the briefing. If `graphify.enabled` is absent or `false`, skip this step entirely.
 
 ## Step 4: Categorize and Summarize
 

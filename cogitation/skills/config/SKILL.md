@@ -1,11 +1,13 @@
 ---
 name: config
-description: View or update cogitation project configuration. Modify test/build/lint commands, branching conventions, or other project settings. Use when user says "change config", "update settings", "set test command", or wants to modify project setup.
+description: Use when changing cogitation project settings (test/build/lint commands, branching conventions, graphify/codex toggles), or the user says "change config", "update settings", or "set test command"
 ---
 
 # Configure Cogitation
 
-View or update project configuration stored in EC.
+Cogitation reads config from **two** places:
+- **EC memory** (`type: config`) — commands and conventions: test/lint/build commands, branch convention. Managed in this skill's Steps 1–5.
+- **`.cogitation/config.json`** (repo root, version-controlled) — feature toggles. Defaults are conservative (everything off). See "Feature toggles" below.
 
 **Announce:** "I'm using the config skill to manage project settings."
 
@@ -28,7 +30,7 @@ ec_search:
 
 > "No configuration found. Want to initialize cogitation for this project?"
 
-If yes → **Use @init**
+If yes → **Use @cog-init**
 
 ## Step 2: Present Current Settings
 
@@ -113,6 +115,22 @@ ec_add:
 > | Test | `pnpm test` | `npm test` |
 >
 > Changes take effect immediately for all cogitation skills.
+
+## Feature toggles (`.cogitation/config.json`)
+
+A version-controlled, per-repo file. All keys optional; omitted = off. To change a toggle, Read it, edit the JSON, write it back.
+
+```json
+{
+  "review":   { "defaultTier": "inline" },     // inline (Tier 0) | subagent (Tier 1)
+  "codex":    { "enabled": false },             // Tier 2 codex-review (needs codex on PATH)
+  "graphify": { "enabled": false, "strict": true, "outDir": "graphify-out" }
+}
+```
+
+- **`graphify.enabled`** — when `true`, `onboard`/`brainstorming` MUST run graphify structural recon (`graphify update .` builds the AST graph with no model/API key; then `graphify query`). When `false`/absent, graphify is never used.
+- **`codex.enabled`** — when `true`, the review ladder may escalate to `@codex-review` (docs) / `/codex:adversarial-review` (code). When `false`, stay at Tier 0/1.
+- **`review.defaultTier`** — default review tier for `executing-plans`.
 
 ## Quick Commands
 

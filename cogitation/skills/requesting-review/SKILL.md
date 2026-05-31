@@ -1,31 +1,19 @@
 ---
 name: requesting-review
-description: Prepares and requests code review with proper context. Searches EC for reviewer preferences and past feedback patterns. Use before finishing a branch or when ready for feedback on implementation.
+description: Use when a diff is large or high-risk and Tier 0 inline self-review isn't enough — dispatches an independent reviewer subagent
 ---
 
 # Requesting Code Review
 
-Prepare changes for review with clear context.
+Dispatch an independent reviewer for changes too large or risky for inline self-review. The reviewer gets precisely crafted context — never your session history — so it judges the work product, not your reasoning, and your own context stays clean.
 
-**Announce:** "I'm using the requesting-review skill to prepare this for review."
+**Announce:** "I'm using the requesting-review skill to dispatch an independent review."
 
-## The Flow
-
-```
-Verify Ready → Load Context → Prepare → Dispatch Reviewer → Handle Response
-```
+**Where this sits:** Tier 1 of the review ladder (see `@executing-plans` Step 5). Default to **Tier 0** inline self-review for small/medium changes. Escalate to **Tier 2** external/adversarial review when you want a second model — only if `codex` is enabled in `.cogitation/config.json`:
+- Code: `/codex:adversarial-review --background` (official `codex-plugin-cc`)
+- Design/plan docs: `@codex-review`
 
 ## Step 1: Verify Ready @verifying
-
-Load project config:
-
-```
-ec_search:
-  query: project config
-  type: config
-```
-
-Before requesting review:
 
 ```bash
 {test_command}
@@ -33,11 +21,11 @@ Before requesting review:
 {build_command}
 ```
 
-**If failures:** Stop. Fix first using `@debugging`.
+**If failures:** Stop. Fix first using `@debugging`. Never request review on red.
 
-## Step 2: Load Review Context
+## Step 2: Load Review Context (EC)
 
-Search EC for relevant review history:
+Search EC so the reviewer gets codebase-specific signal:
 
 ```
 ec_search:
@@ -49,94 +37,94 @@ ec_search:
   type: pattern
 ```
 
-Note any prior feedback patterns to proactively address.
+Note prior feedback patterns to fold into the dispatch context.
 
-## Step 3: Prepare Context
+## Step 3: Dispatch the Reviewer
 
-Gather what the reviewer needs:
-
+Get the range:
 ```bash
-git log --oneline main..HEAD
-git diff --stat main..HEAD
+BASE_SHA=$(git rev-parse origin/main)   # or HEAD~N for a single task
+HEAD_SHA=$(git rev-parse HEAD)
 ```
 
-Identify:
-- **Scope**: What changed and why
-- **Key decisions**: Architectural choices made
-- **Risk areas**: Parts that need careful review
-- **Testing**: How it was verified
-- **EC context**: Prior decisions/patterns that informed this work
+Dispatch the **`general-purpose`** agent (no named agent — one source of truth) with this template:
 
-## Step 4: Dispatch Reviewer
+```
+Task tool (general-purpose):
+  description: "Review code changes"
+  prompt: |
+    You are a Senior Code Reviewer. Review completed work against its plan/requirements
+    and identify issues before they cascade. Read the actual diff — don't trust summaries.
 
-Use the `code-reviewer` agent:
+    ## What Was Implemented
+    {DESCRIPTION}
 
-```markdown
-Task: Code review for [feature name]
-Agent: code-reviewer
+    ## Requirements / Plan
+    {PLAN_OR_REQUIREMENTS}     (e.g. docs/plans/YYYY-MM-DD-<topic>.md)
 
-## Context
-[Brief description of what was implemented]
+    ## Git Range
+    Base: {BASE_SHA}
+    Head: {HEAD_SHA}
+    ```bash
+    git diff --stat {BASE_SHA}..{HEAD_SHA}
+    git diff {BASE_SHA}..{HEAD_SHA}
+    ```
 
-## Changes
-[Output from git diff --stat]
+    ## EC Context (codebase conventions / prior decisions)
+    {EC_CONTEXT}
 
-## Key Decisions
-- [Decision 1 and rationale]
-- [Decision 2 and rationale]
+    ## What to Check
+    - Plan alignment: all planned functionality present; deviations justified, not accidental
+    - Code quality: separation of concerns, error handling, types, DRY without premature abstraction, edge cases
+    - Architecture: sound decisions, security, integrates cleanly with surrounding code
+    - Testing: tests assert real behavior (not mocks); edge cases; all passing
 
-## EC Context Consulted
-- [Relevant decisions/patterns from EC]
+    ## Calibration
+    Categorize by ACTUAL severity — not everything is Critical. Only flag issues that
+    would cause real problems during implementation or in production. Skip style,
+    wording, and formatting preferences. Acknowledge what was done well first so the
+    rest of the feedback is trusted.
 
-## Areas Needing Attention
-- [Specific file or pattern to scrutinize]
-
-## Plan Reference
-docs/plans/YYYY-MM-DD-<topic>.md
+    ## Output
+    ### Strengths
+    ### Issues
+    #### Critical (Must Fix)    — bugs, security, data loss, broken behavior
+    #### Important (Should Fix) — architecture, missing features, test gaps
+    #### Minor (Nice to Have)   — style, optimization, docs
+    (each: file:line · what's wrong · why it matters · how to fix)
+    ### Assessment — Ready to merge? [Yes | No | With fixes] + 1-2 sentence reason
 ```
 
-## Step 5: Handle Response
+Placeholders: `{DESCRIPTION}` what you built · `{PLAN_OR_REQUIREMENTS}` plan path/task text · `{BASE_SHA}`/`{HEAD_SHA}` · `{EC_CONTEXT}` relevant decisions/patterns from Step 2.
 
-When reviewer returns:
+## Step 4: Act on Feedback
 
-**If issues found:**
-1. Categorize: Critical / Important / Minor
-2. Address Critical and Important before proceeding
-3. Use `@receiving-review` to process feedback
+- Fix **Critical** and **Important** before proceeding.
+- Note **Minor** for later.
+- Push back (with technical reasoning) if the reviewer is wrong — process with `@receiving-review`.
 
 **If approved:**
-> "Code review passed. Ready to finish the branch?"
+> "Review passed. Ready to finish the branch?"
 
 If yes → **Use @finishing-branch**
 
-## Store Review Learnings
+## Step 5: Store Review Learnings (EC)
 
-If review reveals a pattern worth remembering:
+If review reveals a durable pattern worth remembering:
 
 ```
 ec_add:
   type: learning
   area: code-review
-  content: [What reviewers commonly catch or request]
+  content: [What reviewers commonly catch in this codebase]
   rationale: Recurring review feedback
 ```
-
-Examples worth storing:
-- Consistent feedback about error handling
-- Patterns reviewers expect in this codebase
-- Common oversights to check before requesting review
 
 ## What Makes a Good Review Request
 
 | Do | Don't |
-|----|-------|
-| Provide context on decisions | Dump code without explanation |
-| Highlight risk areas | Assume reviewer knows everything |
-| Reference the plan | Skip verification before requesting |
+|----|----|
+| Verify green before requesting | Request review on failing tests |
+| Give the reviewer the diff range + plan | Dump code without context |
+| Pass EC conventions/decisions | Assume the reviewer knows the codebase |
 | Keep scope focused | Request review of WIP code |
-| Note EC context consulted | Ignore prior decisions |
-
-## Integration Points
-
-- Called by: `@executing-plans` (Step 5)
-- Calls: `code-reviewer` agent, `@receiving-review`, `@finishing-branch`

@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: Guides test-driven development with red-green-refactor cycle. Stores successful test patterns in EC. Use when implementing new features, fixing bugs, writing tests, adding functionality, or any code change that should be test-first. Default approach for all implementation work.
+description: Use when writing any code — implementing a feature, fixing a bug, adding functionality, or any change that should be test-first (the default for all implementation work)
 ---
 
 # Test-Driven Development

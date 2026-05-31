@@ -1,6 +1,6 @@
 ---
 name: finishing-branch
-description: Verifies tests, reviews for EC memory storage, and presents merge options. Use when implementation is complete and ready to finish a feature branch.
+description: Use when implementation is complete and a feature branch is ready to wrap up and merge
 ---
 
 # Finishing a Branch

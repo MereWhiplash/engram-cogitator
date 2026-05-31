@@ -1,6 +1,6 @@
 ---
 name: remember
-description: Store important project context in EC's persistent memory. Use after making architectural decisions, discovering gotchas or workarounds, identifying recurring patterns, or when user says "remember this", "store this", "save for later", "don't forget".
+description: Use when the user says "remember this", "store this", "save for later", or "don't forget", or after a decision, gotcha, or recurring pattern worth persisting to EC
 ---
 
 # Storing Memories
@@ -17,7 +17,7 @@ Use the 2-of-3 rule. Store if at least TWO are true:
 | `decision` | Architectural choices, why X over Y | "Chose Redis over Memcached because..." |
 | `learning` | Codebase discoveries, gotchas, workarounds | "API rate limits are 100 req/min..." |
 | `pattern` | Recurring conventions in this project | "All API responses use envelope format..." |
-| `config` | Project configuration (managed by @init/@config) | Test commands, branching conventions |
+| `config` | Project configuration (managed by @cog-init/@config) | Test commands, branching conventions |
 
 ## Before Storing
 

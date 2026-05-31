@@ -1,11 +1,11 @@
 ---
 name: executing-plans
-description: Executes TDD implementation plans in batches with review checkpoints. Each task follows @tdd red-green-refactor. Loads EC context before each batch. Use when ready to implement a plan from docs/plans/.
+description: Use when you have a written plan in docs/plans/ ready to implement — runs every task continuously via TDD red-green-refactor, then reviews
 ---
 
 # Executing Plans
 
-Execute plans in TDD batches with review checkpoints.
+Execute a plan continuously in TDD, then review.
 
 **Announce:** "I'm using the executing-plans skill to implement this plan."
 
@@ -24,7 +24,7 @@ No production code without a failing test first.
 ## The Flow
 
 ```
-Verify Branch → EC Search → Load Plan → Execute Batches → Finish
+Verify Branch → EC Search → Load Plan → Execute Tasks → Review → Finish
 ```
 
 ## Step 1: Verify Branch
@@ -67,11 +67,11 @@ Note any gotchas or patterns that apply to this implementation.
 
 ### Option A: Using Tasks (Preferred)
 
-If TaskCreate/TaskUpdate/TaskList tools are available:
+If TaskCreate/TaskUpdate/TaskList tools are available, create one task per plan task:
 ```
-TaskCreate: "Batch 1: [first 3 tasks summary]"
-TaskCreate: "Batch 2: [next 3 tasks summary]" → addBlockedBy: [batch 1 id]
-TaskCreate: "Batch 3: [final tasks summary]" → addBlockedBy: [batch 2 id]
+TaskCreate: "Task 1: [first task summary]"
+TaskCreate: "Task 2: [second task summary]" → addBlockedBy: [task 1 id]
+... one per plan task, chained in order
 ```
 
 Benefits:
@@ -81,21 +81,21 @@ Benefits:
 
 ### Option B: Using TodoWrite (Fallback)
 
-If Tasks aren't available, create a TodoWrite with all batches and update as you go.
+If Tasks aren't available, create a TodoWrite with all plan tasks and update as you go.
 
-## Step 4: Execute in Batches
+## Step 4: Execute the Plan
 
-**Default batch size: 3 tasks**
+Execute **continuously** — work through every task in order, stopping only for a real blocker (see "When to Stop"). Do **not** pause for feedback between tasks; that round-trip adds latency without improving quality.
 
-**Before each batch, ask:**
+**Decide once, up front, how to run the whole plan:**
 ```json
 {
   "questions": [{
-    "question": "How should I execute Batch N (tasks X-Y)?",
+    "question": "How should I execute this plan?",
     "header": "Execution",
     "options": [
-      { "label": "Main thread", "description": "Execute here with full visibility" },
-      { "label": "Subagent", "description": "Fresh context, returns summary" }
+      { "label": "Main thread", "description": "Execute here with full visibility (default)" },
+      { "label": "Subagent-driven", "description": "Dispatch a fresh subagent to run the plan; returns a summary" }
     ],
     "multiSelect": false
   }]
@@ -105,28 +105,28 @@ If Tasks aren't available, create a TodoWrite with all batches and update as you
 ### Main Thread Execution
 
 For each task, follow **@tdd**:
-1. Mark batch as `in_progress` (TaskUpdate if using Tasks, otherwise TodoWrite)
+1. Mark the task `in_progress` (TaskUpdate if using Tasks, otherwise TodoWrite)
 2. **RED:** Write a failing test for the behavior this task introduces
 3. **GREEN:** Write minimal production code to make it pass
 4. **REFACTOR:** Clean up while keeping tests green
 5. Run full verifications as specified (`@verifying`)
-6. Commit after each task passes
-7. Mark as `completed` when batch passes verification
+6. Commit after the task passes
+7. Mark `completed`, then move straight to the next task
 
-### Subagent Execution
+### Subagent-Driven Execution
 
 Dispatch with this prompt:
 ```markdown
-Execute tasks X-Y from this plan:
+Execute this plan end to end:
 
-[Paste relevant task sections from plan]
+[Paste the plan tasks]
 
 Requirements:
 - EVERY task follows @tdd: write failing test FIRST, then minimal code to pass, then refactor
 - No production code without a failing test — if you can't test it, stop and report
 - Use @verifying before claiming any step complete
 - Commit after each task
-- Stop and report if any verification fails
+- Execute continuously; stop and report ONLY on a blocker
 
 EC Context:
 - Test command: {test_command}
@@ -136,30 +136,34 @@ Return:
 - Summary of what was implemented
 - Tests written and their status
 - Files created/modified
-- Any issues or blockers encountered
+- Any blockers encountered
 ```
 
-After subagent returns:
-1. Review the summary
-2. Update progress tracking (TaskUpdate if using Tasks, otherwise TodoWrite)
-3. If issues reported, switch to main thread for fixes
+**Tip:** If using Tasks, the subagent can share the same task list by setting `CLAUDE_CODE_TASK_LIST_ID` — updates broadcast across sessions.
 
-**Tip:** If using Tasks, subagents can share the same task list by setting `CLAUDE_CODE_TASK_LIST_ID` - updates broadcast across sessions.
+When all tasks are done and verified:
+> "Implementation complete. [Brief summary]."
 
-**After each batch:**
-> "Completed tasks N-M. [Brief summary]. Ready for feedback."
+## Step 5: Review (the review ladder)
 
-Wait for feedback before continuing.
+Pick the lightest tier that fits the change. Default to **Tier 0**.
 
-## Step 5: Request Code Review @requesting-review
+- **Tier 0 — Inline self-review (default).** No dispatch. Re-read the full diff yourself against this checklist:
+  - Spec coverage — every plan task actually implemented, nothing extra (YAGNI)
+  - Tests assert real behavior, not mocks; edge cases covered
+  - No placeholders / TODO / dead code left behind
+  - Internal consistency — names, types, error handling match the codebase
+  - Verifications pass (`@verifying`)
 
-After all tasks complete, use `@requesting-review` to:
-1. Verify tests pass
-2. Prepare context for reviewer
-3. Dispatch `code-reviewer` agent
-4. Handle feedback with `@receiving-review`
+  Catches most issues in ~30s. For small/medium changes this is enough.
 
-Address any Critical or Important issues before proceeding.
+- **Tier 1 — Subagent review (opt-in).** For larger or higher-risk diffs, use `@requesting-review` to dispatch an independent reviewer.
+
+- **Tier 2 — External / adversarial review (opt-in).** When you want a second model to pressure-test the work, and `codex` is enabled in `.cogitation/config.json`:
+  - **Code / implementation:** prefer the official `codex-plugin-cc` — `/codex:adversarial-review --background` (non-blocking; retrieve with `/codex:result`).
+  - **Design / plan docs:** use `@codex-review` (pre-execution artifact review).
+
+Process feedback from any tier with `@receiving-review`. Address Critical and Important issues before finishing. Minor/style notes don't block.
 
 ## Step 6: Store Patterns
 
@@ -184,7 +188,7 @@ If yes → **Use @finishing-branch**
 ## When to Stop
 
 **Stop and ask when:**
-- Blocker mid-batch (missing dependency, test fails)
+- Blocker mid-task (missing dependency, test fails)
 - Plan has gaps
 - Instruction is unclear
 - Verification fails repeatedly

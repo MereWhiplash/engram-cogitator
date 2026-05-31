@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Review and maintain EC memories. List all memories, find duplicates, prune stale entries, and organize by type. Use when memories need cleanup, when user says "audit memories", "clean up EC", "review what's stored", or periodically for hygiene.
+description: Use when EC memories need cleanup — deduping, pruning stale entries, hygiene — or the user says "audit memories", "clean up EC", or "review what's stored"
 ---
 
 # Audit EC Memories

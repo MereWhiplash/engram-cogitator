@@ -1,6 +1,6 @@
 ---
 name: writing-skills
-description: Creates new cogitation skills following best practices and EC integration patterns. Use when adding new capabilities or workflows to the skill set.
+description: Use when adding a new cogitation skill or workflow to the skill set
 ---
 
 # Writing Skills
@@ -16,7 +16,7 @@ Every skill needs a `SKILL.md` file in `cogitation/skills/<skill-name>/`:
 ```yaml
 ---
 name: skill-name
-description: [Third person verb] what it does. Mentions EC integration. Use when [trigger conditions].
+description: Use when adding a new cogitation skill or workflow to the skill set
 ---
 
 # Skill Title
@@ -56,12 +56,12 @@ ec_search for relevant config/patterns/learnings.
 
 **Good:**
 ```yaml
-description: Provides systematic debugging workflow that finds root cause before fixing. Searches EC for prior issues and stores learnings. Use when encountering bugs, test failures, or unexpected behavior.
+description: Use when adding a new cogitation skill or workflow to the skill set
 ```
 
 **Bad:**
 ```yaml
-description: Use this for debugging
+description: Use when adding a new cogitation skill or workflow to the skill set
 ```
 
 ## Content Guidelines

@@ -26,3 +26,7 @@ docs/plans/
 
 # Engram Cogitator local memory
 .engram/memory.db
+
+# Generated graphify output
+graphify-out/
+.cogitation/codex/

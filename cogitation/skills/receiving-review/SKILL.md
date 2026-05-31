@@ -1,6 +1,6 @@
 ---
 name: receiving-review
-description: Handles code review feedback by verifying before implementing and pushing back if incorrect. Checks EC for context on prior decisions. Use when receiving code review comments or PR feedback.
+description: Use when processing code review feedback or PR comments — verify against the codebase before implementing, push back with reasoning when the feedback is wrong
 ---
 
 # Receiving Code Review

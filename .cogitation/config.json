@@ -1,0 +1,14 @@
+{
+  "$comment": "Per-repo cogitation config. All keys optional; defaults are conservative (everything off). See cogitation:config skill.",
+  "review": {
+    "defaultTier": "inline"
+  },
+  "codex": {
+    "enabled": true
+  },
+  "graphify": {
+    "enabled": true,
+    "strict": true,
+    "outDir": "graphify-out"
+  }
+}

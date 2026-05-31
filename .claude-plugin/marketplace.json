@@ -13,7 +13,7 @@
       "name": "cogitation",
       "source": "./cogitation",
       "description": "Opinionated development workflows powered by EC's persistent memory. Includes TDD, debugging, brainstorming, planning, and more. Requires engram-cogitator MCP server.",
-      "version": "0.1.0",
+      "version": "0.5.0",
       "author": {
         "name": "MereWhiplash"
       },

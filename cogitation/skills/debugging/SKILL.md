@@ -1,6 +1,6 @@
 ---
 name: debugging
-description: Provides systematic debugging workflow that finds root cause before fixing. Fix phase uses @tdd to write a failing test reproducing the bug, then fix. Searches EC for prior issues and stores learnings. Use when encountering bugs, test failures, or unexpected behavior.
+description: Use when encountering a bug, test failure, or unexpected behavior and you need to find root cause before fixing
 ---
 
 # Systematic Debugging
