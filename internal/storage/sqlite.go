@@ -28,6 +28,20 @@ func NewSQLite(path string) (*SQLite, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
+	// Single shared api process, but database/sql pools connections — harden for it.
+	// SetMaxOpenConns(1) fully serializes writes (correct + simplest for a low-volume
+	// memory store); WAL + busy_timeout still benefit the offline cmd/server fallback.
+	conn.SetMaxOpenConns(1)
+	for _, pragma := range []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA busy_timeout=5000",
+		"PRAGMA foreign_keys=ON",
+	} {
+		if _, err := conn.Exec(pragma); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to set %q: %w", pragma, err)
+		}
+	}
 
 	s := &SQLite{conn: conn}
 	if err := s.initSchema(); err != nil {
