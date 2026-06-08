@@ -116,7 +116,14 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	memories, err := h.svc.SearchWithRepo(ctx, req.Query, limit, req.Type, req.Area, req.Repo)
+	// Fall back to the X-EC-Repo header (via context) so shim-mode search stays
+	// repo-scoped; an explicit body repo still wins.
+	repo := req.Repo
+	if repo == "" {
+		repo = GetRepo(ctx)
+	}
+
+	memories, err := h.svc.SearchWithRepo(ctx, req.Query, limit, req.Type, req.Area, repo)
 	if err != nil {
 		h.logError(r, "search", err)
 		h.respondError(w, http.StatusInternalServerError, "failed to search memories")
@@ -148,6 +155,12 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 	includeInvalid := r.URL.Query().Get("include_invalid") == "true"
 
 	ctx := r.Context()
+
+	// Fall back to the X-EC-Repo header (via context) so shim-mode list stays
+	// repo-scoped; an explicit query repo still wins.
+	if repo == "" {
+		repo = GetRepo(ctx)
+	}
 
 	// Request one extra to determine if there are more results
 	memories, err := h.svc.ListWithRepo(ctx, limit+1, memType, area, repo, includeInvalid, offset)
