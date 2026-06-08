@@ -186,23 +186,36 @@ This is useful for teams sharing a database without the full Kubernetes team mod
 
 ### Architecture
 
+Solo mode runs **one shared `engram-cogitator-api` container** (like the Ollama
+container) plus a lightweight **native `ec-shim` process per session**. Each Claude/
+Cursor session spawns the shim — not a full server container — so there is no
+per-session container proliferation and only the singleton api writes to
+`~/.engram/memory.db`.
+
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Your Machine                       │
-│                                                      │
-│  ┌──────────────┐      MCP/stdio      ┌──────────┐  │
-│  │ Claude Code  │◄───────────────────►│ EC Server│  │
-│  │   Cursor     │                     │ (Docker) │  │
-│  │   Cline      │                     └────┬─────┘  │
-│  │   Windsurf   │                          │        │
-│  └──────────────┘                          │        │
-│                                            ▼        │
-│                               ┌────────────────────┐│
-│                               │ SQLite + Ollama    ││
-│                               │ ~/.engram/memory.db││
-│                               └────────────────────┘│
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                          Your Machine                          │
+│                                                                │
+│  ┌──────────────┐  stdio   ┌──────────┐  HTTP   ┌───────────┐ │
+│  │ Claude Code  │◄────────►│ ec-shim  │◄───────►│ ec-api    │ │
+│  │   Cursor     │ (session) │ (native) │ :8080   │ (Docker,  │ │
+│  │   Cline      │          └──────────┘ loopback │ singleton)│ │
+│  │   Windsurf   │                                └─────┬─────┘ │
+│  └──────────────┘                                      │       │
+│                                                        ▼       │
+│                                          ┌────────────────────┐│
+│                                          │ SQLite + Ollama    ││
+│                                          │ ~/.engram/memory.db││
+│                                          └────────────────────┘│
+└──────────────────────────────────────────────────────────────┘
 ```
+
+- The launcher `~/.engram/ec-ensure-api.sh` idempotently guarantees the singleton
+  api is up (`docker run -d --restart unless-stopped`, bound to `127.0.0.1` only),
+  then execs the native shim. Override the port with `EC_API_PORT` (default `8080`).
+- **Offline / no-docker fallback:** the per-session `~/.engram/ec-run.sh` wrapper
+  (the previous monolithic `cmd/server` in a container) is still deployed. If a
+  native shim can't be acquired, the installer registers `ec-run.sh` instead.
 
 **Project identity is auto-detected:**
 1. Git remote origin → normalized to "org/repo"
@@ -219,8 +232,9 @@ curl -sSL https://raw.githubusercontent.com/MereWhiplash/engram-cogitator/main/i
 This installs:
 
 - Ollama container for local embeddings
-- EC server container
-- MCP configuration for your client
+- The shared `engram-cogitator-api` container (singleton, loopback-bound)
+- A native `ec-shim` host binary (`~/.engram/ec-shim`)
+- The `ec-ensure-api.sh` launcher + MCP configuration for your client
 
 **Note:** Skills are now installed separately via the cogitation plugin (see Quick Start).
 

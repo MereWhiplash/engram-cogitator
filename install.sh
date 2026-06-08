@@ -118,6 +118,126 @@ EC_IMAGE="ghcr.io/merewhiplash/engram-cogitator:${EC_VERSION}"
 OLLAMA_IMAGE="ollama/ollama:latest"
 EMBEDDING_MODEL="nomic-embed-text"
 
+# Solo default is the shared-api model: one singleton ec-api container + a native
+# ec-shim per session. EC_LAUNCHER flips to ec-ensure-api.sh once a native shim is
+# acquired; otherwise we fall back to the per-session ec-run.sh wrapper.
+API_NAME="engram-cogitator-api"
+EC_LAUNCHER="ec-run.sh"
+
+# Detect host OS/arch for native shim selection (the shim runs on the host, not in docker).
+detect_platform() {
+    SHIM_OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    SHIM_ARCH=$(uname -m)
+    case "$SHIM_ARCH" in
+        x86_64) SHIM_ARCH="amd64" ;;
+        aarch64|arm64) SHIM_ARCH="arm64" ;;
+    esac
+}
+
+# Resolve the latest release tag (ported from install-team.sh). Honors GITHUB_TOKEN.
+fetch_shim_version() {
+    local auth_header=""
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        auth_header="-H \"Authorization: token $GITHUB_TOKEN\""
+    fi
+    local response
+    response=$(eval curl -s "$auth_header" https://api.github.com/repos/MereWhiplash/engram-cogitator/releases/latest)
+    echo "$response" | grep tag_name | cut -d '"' -f 4
+}
+
+# Assert the acquired shim is a NATIVE host binary (image /ec-shim is a Linux ELF and
+# will not execute on macOS/Windows). Mach-O on darwin, ELF on linux.
+assert_native_shim() {
+    local info
+    info=$(file "$1" 2>/dev/null || echo "")
+    case "$SHIM_OS" in
+        darwin) echo "$info" | grep -qi "mach-o" ;;
+        linux)  echo "$info" | grep -qi "elf" ;;
+        *)      [ -s "$1" ] ;;
+    esac
+}
+
+# Acquire a native host ec-shim into ~/.engram/ec-shim.
+# Order: prebuilt release -> local go build (no CGO) -> docker cp (linux only).
+acquire_shim() {
+    local shim="$ENGRAM_DIR/ec-shim"
+    detect_platform
+
+    # 1) Prebuilt release (primary)
+    local ver
+    ver="${SHIM_VERSION:-$(fetch_shim_version)}"
+    if [ -n "$ver" ]; then
+        local url="https://github.com/MereWhiplash/engram-cogitator/releases/download/${ver}/ec-shim_${ver#v}_${SHIM_OS}_${SHIM_ARCH}.tar.gz"
+        local tmp
+        tmp=$(mktemp -d)
+        if curl -sSL "$url" 2>/dev/null | tar -xz -C "$tmp" 2>/dev/null && [ -f "$tmp/ec-shim" ]; then
+            mv "$tmp/ec-shim" "$shim" && chmod +x "$shim"
+            rm -rf "$tmp"
+            if assert_native_shim "$shim"; then
+                echo -e "${GREEN}Installed ec-shim from release ${ver}${NC}"
+                return 0
+            fi
+            echo -e "${YELLOW}Release shim is not native for ${SHIM_OS}/${SHIM_ARCH}; trying local build...${NC}"
+        else
+            rm -rf "$tmp"
+        fi
+    fi
+
+    # 2) Local build (fallback; the shim has no CGO deps)
+    if command -v go >/dev/null && [ -d "$SCRIPT_DIR/cmd/shim" ]; then
+        echo -e "${YELLOW}Building ec-shim from source...${NC}"
+        if (cd "$SCRIPT_DIR" && CGO_ENABLED=0 go build -o "$shim" ./cmd/shim) && chmod +x "$shim" && assert_native_shim "$shim"; then
+            echo -e "${GREEN}Built native ec-shim from source${NC}"
+            return 0
+        fi
+    fi
+
+    # 3) docker cp from image (Linux hosts only — image /ec-shim is a Linux ELF)
+    if [ "$SHIM_OS" = "linux" ]; then
+        echo -e "${YELLOW}Extracting ec-shim from image...${NC}"
+        local cid
+        cid=$(docker create "$EC_IMAGE" 2>/dev/null) || true
+        if [ -n "$cid" ]; then
+            docker cp "$cid:/ec-shim" "$shim" &>/dev/null && chmod +x "$shim"
+            docker rm "$cid" &>/dev/null || true
+            assert_native_shim "$shim" && { echo -e "${GREEN}Extracted ec-shim from image${NC}"; return 0; }
+        fi
+    fi
+
+    return 1
+}
+
+# Start the singleton shared api (after ollama is up). Mirrors the ollama block's
+# idempotency: running -> noop, stopped -> start, missing -> docker run.
+start_shared_api() {
+    local db_path="$ENGRAM_DIR/memory.db"
+    # shellcheck source=/dev/null
+    [ -f "$ENGRAM_DIR/config" ] && . "$ENGRAM_DIR/config"
+    [ -n "${EC_DB_PATH:-}" ] && db_path="$EC_DB_PATH"
+
+    if docker ps --format '{{.Names}}' | grep -q "^${API_NAME}$"; then
+        echo -e "${GREEN}Shared api already running.${NC}"
+        return 0
+    fi
+    if docker ps -a --format '{{.Names}}' | grep -q "^${API_NAME}$"; then
+        echo -e "${YELLOW}Starting existing shared api...${NC}"
+        docker start "$API_NAME" &>/dev/null
+        return 0
+    fi
+    echo -e "${YELLOW}Starting shared api (${API_NAME})...${NC}"
+    docker run -d \
+        --name "$API_NAME" \
+        --restart unless-stopped \
+        --network engram-network \
+        -p "127.0.0.1:8080:8080" \
+        -v "$ENGRAM_DIR:/data" \
+        "$EC_IMAGE" \
+        --addr ":8080" \
+        --storage-driver sqlite \
+        --db-path "/data/$(basename "$db_path")" \
+        --ollama-url http://engram-ollama:11434 &>/dev/null
+}
+
 # Detect if this is an update (wrapper + engram dir already exist)
 IS_UPDATE=false
 if [ -f "$ENGRAM_DIR/ec-run.sh" ] && [ -d "$ENGRAM_DIR" ]; then
@@ -209,12 +329,31 @@ else
     echo -e "${GREEN}Installed ~/.engram/ec-run.sh${NC}"
 fi
 
+# Deploy the shared-api singleton launcher (solo default)
+if [ -f "$SCRIPT_DIR/scripts/ec-ensure-api.sh" ]; then
+    cp "$SCRIPT_DIR/scripts/ec-ensure-api.sh" "$ENGRAM_DIR/ec-ensure-api.sh"
+else
+    curl -sSL "${EC_RAW_URL}/scripts/ec-ensure-api.sh" -o "$ENGRAM_DIR/ec-ensure-api.sh"
+fi
+chmod +x "$ENGRAM_DIR/ec-ensure-api.sh"
+echo -e "${GREEN}Installed ~/.engram/ec-ensure-api.sh${NC}"
+
 # Pull EC image (always — this is the main thing an update does)
 echo -e "${YELLOW}Pulling Engram Cogitator image...${NC}"
 docker pull ${EC_IMAGE} 2>/dev/null || {
     echo -e "${YELLOW}Image not found in registry, will build locally...${NC}"
     EC_IMAGE="engram-cogitator:local"
 }
+
+# Acquire a native ec-shim. On success, register the shared-api launcher; otherwise
+# fall back to the per-session ec-run.sh wrapper.
+echo -e "${YELLOW}Acquiring native ec-shim...${NC}"
+if acquire_shim; then
+    EC_LAUNCHER="ec-ensure-api.sh"
+else
+    echo -e "${YELLOW}Could not acquire a native ec-shim — falling back to per-session server (ec-run.sh).${NC}"
+    EC_LAUNCHER="ec-run.sh"
+fi
 
 # --- Fresh install only: full setup ---
 if [ "$IS_UPDATE" = false ]; then
@@ -275,10 +414,10 @@ if [ "$IS_UPDATE" = false ]; then
 
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             claude mcp remove engram-cogitator --scope user 2>/dev/null || true
-            # Use wrapper script for container lifecycle management (naming, labels, cleanup)
+            # Register the chosen launcher (shared-api singleton, or per-session fallback)
             claude mcp add --transport stdio engram-cogitator \
               --scope user \
-              -- /bin/sh -c "\$HOME/.engram/ec-run.sh"
+              -- /bin/sh -c "\$HOME/.engram/${EC_LAUNCHER}"
             echo -e "${GREEN}Claude Code configured globally!${NC}"
         fi
         echo ""
@@ -289,12 +428,12 @@ if [ "$IS_UPDATE" = false ]; then
     echo ""
     echo "Add to ~/.cursor/mcp.json or VS Code MCP settings:"
     echo ""
-    cat << 'EOF'
+    cat << EOF
 {
   "mcpServers": {
     "engram-cogitator": {
       "command": "/bin/sh",
-      "args": ["-c", "$HOME/.engram/ec-run.sh"]
+      "args": ["-c", "\$HOME/.engram/${EC_LAUNCHER}"]
     }
   }
 }
@@ -324,15 +463,22 @@ EOF
     echo ""
 
 else
-    # --- Update path: re-register MCP (in case wrapper args changed) ---
+    # --- Update path: re-register MCP against the shared-api launcher ---
     if command -v claude &> /dev/null; then
         echo -e "${YELLOW}Updating Claude Code MCP registration...${NC}"
         claude mcp remove engram-cogitator --scope user 2>/dev/null || true
         claude mcp add --transport stdio engram-cogitator \
           --scope user \
-          -- /bin/sh -c "\$HOME/.engram/ec-run.sh"
+          -- /bin/sh -c "\$HOME/.engram/${EC_LAUNCHER}"
         echo -e "${GREEN}Claude Code MCP updated.${NC}"
     fi
+
+    # Old per-session servers are left to DRAIN (not force-killed): a window where
+    # both they and the new shared api hold memory.db open. Old connections lack
+    # busy_timeout, so a rare write collision could surface "database is locked" for
+    # them; WAL is a persistent DB-header setting, so they still operate correctly.
+    echo -e "${YELLOW}Note: existing per-session EC servers will exit as those Claude windows close.${NC}"
+    echo -e "${YELLOW}      For a clean cutover, close other Claude windows before upgrading.${NC}"
 
     # Update instructions file
     echo -e "${YELLOW}Updating AI assistant instructions...${NC}"
@@ -367,7 +513,8 @@ LABELED_STALE=$(docker ps -a \
     --filter "label=io.engram-cogitator.role=mcp-server" \
     --filter "status=exited" --filter "status=dead" --filter "status=created" \
     --format '{{.ID}} {{.Names}}' 2>/dev/null) || true
-ORPHANED=$(docker ps -a --filter "ancestor=${EC_IMAGE}" --format '{{.ID}} {{.Names}}' 2>/dev/null | grep -v 'ec-mcp-\|ec-hook-' || true)
+# Exclude the singleton shared api (engram-cogitator-api) — it is long-lived, not orphaned.
+ORPHANED=$(docker ps -a --filter "ancestor=${EC_IMAGE}" --format '{{.ID}} {{.Names}}' 2>/dev/null | grep -v 'ec-mcp-\|ec-hook-\|engram-cogitator-api' || true)
 ALL_STALE=$(printf '%s\n%s' "$LABELED_STALE" "$ORPHANED" | sort -u | grep -v '^$' || true)
 if [ -n "$ALL_STALE" ]; then
     echo -e "${YELLOW}Found stale EC containers:${NC}"
@@ -403,6 +550,12 @@ fi
 echo -e "${YELLOW}Pulling embedding model (${EMBEDDING_MODEL})...${NC}"
 docker exec engram-ollama ollama pull ${EMBEDDING_MODEL}
 
+# Start the singleton shared api (only when registered against the shared-api launcher).
+# Per-session sessions otherwise lazily start it via ec-ensure-api.sh.
+if [ "$EC_LAUNCHER" = "ec-ensure-api.sh" ]; then
+    start_shared_api
+fi
+
 echo ""
 if [ "$IS_UPDATE" = true ]; then
     echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
@@ -411,8 +564,9 @@ if [ "$IS_UPDATE" = true ]; then
     echo ""
     echo "Updated:"
     echo "  - EC Docker image (latest)"
-    echo "  - Container lifecycle wrapper (~/.engram/ec-run.sh)"
-    echo "  - MCP server registration"
+    echo "  - Shared-api launcher (~/.engram/ec-ensure-api.sh) + native ec-shim"
+    echo "  - Per-session fallback wrapper (~/.engram/ec-run.sh)"
+    echo "  - MCP server registration → ${EC_LAUNCHER}"
     if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
     echo "  - EC section in CLAUDE.md"
     fi
@@ -426,7 +580,8 @@ else
     echo "Engram Cogitator MCP server is now configured."
     echo ""
     echo "What's installed:"
-    echo "  - Docker containers (Ollama + EC)"
+    echo "  - Docker containers (Ollama + shared engram-cogitator-api)"
+    echo "  - Native ec-shim per session (~/.engram/ec-shim)"
     case "$CUSTOM_DB_PATH" in
         postgres://*|postgresql://*)
     echo "  - PostgreSQL database"
