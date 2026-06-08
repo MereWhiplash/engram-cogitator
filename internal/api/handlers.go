@@ -116,8 +116,7 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// Fall back to the X-EC-Repo header (via context) so shim-mode search stays
-	// repo-scoped; an explicit body repo still wins.
+	// Fall back to the X-EC-Repo header so shim-mode stays repo-scoped; body wins.
 	repo := req.Repo
 	if repo == "" {
 		repo = GetRepo(ctx)
@@ -156,8 +155,7 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// Fall back to the X-EC-Repo header (via context) so shim-mode list stays
-	// repo-scoped; an explicit query repo still wins.
+	// Fall back to the X-EC-Repo header so shim-mode stays repo-scoped; query wins.
 	if repo == "" {
 		repo = GetRepo(ctx)
 	}

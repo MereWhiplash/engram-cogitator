@@ -24,8 +24,8 @@ const (
 // MaxRequestBodySize is the maximum allowed request body size (1MB)
 const MaxRequestBodySize = 1 << 20
 
-// repoPattern validates owner/repo format
-var repoPattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$`)
+// repoPattern accepts "owner/repo" or an absolute path (GetProjectID's fallback).
+var repoPattern = regexp.MustCompile(`^(/.+|[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)$`)
 
 // RequestID adds a unique request ID to each request
 func RequestID(next http.Handler) http.Handler {

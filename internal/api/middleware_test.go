@@ -39,6 +39,36 @@ func TestGitContext(t *testing.T) {
 	}
 }
 
+func TestGitContext_RepoValues(t *testing.T) {
+	cases := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		// Real solo-mode value: GetProjectID() falls back to an absolute path for
+		// repos without a remote, so the path form must be accepted (not dropped).
+		{"absolute path", "/Users/ashortt/dev/engram-cogitator", "/Users/ashortt/dev/engram-cogitator"},
+		{"owner/repo still accepted", "myorg/myrepo", "myorg/myrepo"},
+		{"single token rejected", "garbage", ""},
+		{"relative path rejected", "../etc/passwd", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got string
+			handler := api.GitContext(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got = api.GetRepo(r.Context())
+				w.WriteHeader(http.StatusOK)
+			}))
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set("X-EC-Repo", tc.header)
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+			if got != tc.want {
+				t.Errorf("repo header %q → GetRepo = %q, want %q", tc.header, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRateLimiter(t *testing.T) {
 	rl := api.NewRateLimiter(3, 100*time.Millisecond)
 	defer rl.Stop()
