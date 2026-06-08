@@ -345,14 +345,28 @@ docker pull ${EC_IMAGE} 2>/dev/null || {
     EC_IMAGE="engram-cogitator:local"
 }
 
-# Acquire a native ec-shim. On success, register the shared-api launcher; otherwise
-# fall back to the per-session ec-run.sh wrapper.
-echo -e "${YELLOW}Acquiring native ec-shim...${NC}"
-if acquire_shim; then
-    EC_LAUNCHER="ec-ensure-api.sh"
-else
-    echo -e "${YELLOW}Could not acquire a native ec-shim — falling back to per-session server (ec-run.sh).${NC}"
+# The shared-api model solves the local SQLite multi-writer problem. Postgres/MongoDB
+# solo users already point at external shared storage (no local contention) and the
+# launcher is sqlite-only — keep them on ec-run.sh to avoid a silent driver switch.
+CONFIGURED_DRIVER="sqlite"
+if [ -f "$ENGRAM_DIR/config" ]; then
+    CONFIGURED_DRIVER="$(grep -E '^EC_STORAGE_DRIVER=' "$ENGRAM_DIR/config" | cut -d '=' -f2)"
+    CONFIGURED_DRIVER="${CONFIGURED_DRIVER:-sqlite}"
+fi
+
+# Acquire a native ec-shim (sqlite only). On success, register the shared-api
+# launcher; otherwise fall back to the per-session ec-run.sh wrapper.
+if [ "$CONFIGURED_DRIVER" != "sqlite" ]; then
+    echo -e "${CYAN}Storage driver is ${CONFIGURED_DRIVER}; keeping per-session server (ec-run.sh).${NC}"
     EC_LAUNCHER="ec-run.sh"
+else
+    echo -e "${YELLOW}Acquiring native ec-shim...${NC}"
+    if acquire_shim; then
+        EC_LAUNCHER="ec-ensure-api.sh"
+    else
+        echo -e "${YELLOW}Could not acquire a native ec-shim — falling back to per-session server (ec-run.sh).${NC}"
+        EC_LAUNCHER="ec-run.sh"
+    fi
 fi
 
 # --- Fresh install only: full setup ---
