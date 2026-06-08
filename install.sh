@@ -238,6 +238,46 @@ start_shared_api() {
         --ollama-url http://engram-ollama:11434 &>/dev/null
 }
 
+# Re-key path-style repos (old --repo "$(pwd)" scheme) to GetProjectID's owner/repo,
+# using the native shim so the normalize logic matches the running shim exactly.
+# Idempotent (WHERE repo LIKE '/%'). EC_MIGRATE_DRY_RUN=1 prints the plan only.
+migrate_repo_keys() {
+    local db="$1" shim="${EC_SHIM_BIN:-$ENGRAM_DIR/ec-shim}"
+    command -v sqlite3 >/dev/null || { echo -e "${YELLOW}sqlite3 not found; skipping repo-key migration.${NC}"; return 0; }
+    [ -f "$db" ] && [ -x "$shim" ] || return 0
+
+    local paths
+    paths=$(sqlite3 "$db" "SELECT DISTINCT repo FROM memories WHERE repo LIKE '/%';" 2>/dev/null) || return 0
+    [ -n "$paths" ] || { echo -e "${GREEN}No path-keyed memories to migrate.${NC}"; return 0; }
+
+    local dry="${EC_MIGRATE_DRY_RUN:-}"
+    if [ -z "$dry" ]; then
+        cp "$db" "${db}.bak" && echo -e "${CYAN}Backed up ${db} -> ${db}.bak${NC}"
+    fi
+
+    echo "$paths" | while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        local n id esc_path esc_id
+        n=$(sqlite3 "$db" "SELECT COUNT(*) FROM memories WHERE repo='${path//\'/\'\'}';")
+        if [ ! -d "$path" ]; then
+            echo -e "  ${YELLOW}skip${NC} ${path} (dir gone, ${n} rows stay path-keyed)"
+            continue
+        fi
+        id=$(cd "$path" && "$shim" --project-id 2>/dev/null)
+        if [ -z "$id" ] || [ "$id" = "$path" ]; then
+            echo -e "  ${YELLOW}skip${NC} ${path} (no remote, ${n} rows stay path-keyed)"
+            continue
+        fi
+        esc_path="${path//\'/\'\'}"; esc_id="${id//\'/\'\'}"
+        if [ -n "$dry" ]; then
+            echo -e "  would migrate ${path} -> ${id} (${n} rows)"
+        else
+            sqlite3 "$db" "UPDATE memories SET repo='${esc_id}' WHERE repo='${esc_path}';"
+            echo -e "  ${GREEN}migrated${NC} ${path} -> ${id} (${n} rows)"
+        fi
+    done
+}
+
 # Detect if this is an update (wrapper + engram dir already exist)
 IS_UPDATE=false
 if [ -f "$ENGRAM_DIR/ec-run.sh" ] && [ -d "$ENGRAM_DIR" ]; then
@@ -564,9 +604,12 @@ fi
 echo -e "${YELLOW}Pulling embedding model (${EMBEDDING_MODEL})...${NC}"
 docker exec engram-ollama ollama pull ${EMBEDDING_MODEL}
 
-# Start the singleton shared api (only when registered against the shared-api launcher).
-# Per-session sessions otherwise lazily start it via ec-ensure-api.sh.
+# Migrate repo keys, then start the singleton api (shared-api / sqlite path only).
 if [ "$EC_LAUNCHER" = "ec-ensure-api.sh" ]; then
+    DB_PATH_FOR_MIGRATE="$ENGRAM_DIR/memory.db"
+    [ -n "${EC_DB_PATH:-}" ] && DB_PATH_FOR_MIGRATE="$EC_DB_PATH"
+    echo -e "${YELLOW}Migrating repo keys to owner/repo...${NC}"
+    migrate_repo_keys "$DB_PATH_FOR_MIGRATE"
     start_shared_api
 fi
 
