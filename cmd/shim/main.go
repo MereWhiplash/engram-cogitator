@@ -23,10 +23,17 @@ var version = "dev"
 func main() {
 	apiURL := flag.String("api-url", "", "Central API URL (required)")
 	versionFlag := flag.Bool("version", false, "Print version and exit")
+	projectIDFlag := flag.Bool("project-id", false, "Print the project identity (GetProjectID) for the current directory and exit")
 	flag.Parse()
 
 	if *versionFlag {
 		fmt.Printf("ec-shim %s\n", version)
+		return
+	}
+
+	// Short-circuit (no api connection): emit canonical project identity for tooling.
+	if *projectIDFlag {
+		fmt.Println(gitinfo.GetProjectID())
 		return
 	}
 
@@ -39,8 +46,10 @@ func main() {
 		log.Fatal("API URL required: use --api-url or EC_API_URL environment variable")
 	}
 
-	// Extract git info
+	// Extract git info; use GetProjectID for repo identity (owner/repo, else path)
+	// so shim writes match the server/migration scheme.
 	gitInfo := gitinfo.Get()
+	gitInfo.Repo = gitinfo.GetProjectID()
 
 	if os.Getenv("EC_DEBUG") != "" {
 		log.Printf("Git context: author=%s <%s>, repo=%s", gitInfo.AuthorName, gitInfo.AuthorEmail, gitInfo.Repo)

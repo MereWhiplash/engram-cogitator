@@ -33,6 +33,8 @@ type mockStorage struct {
 	nextID         int64
 	invalidateErr  error
 	invalidatedIDs []int64
+	searchRepo     string // captures opts.Repo from the last Search call
+	listRepo       string // captures opts.Repo from the last List call
 }
 
 func (m *mockStorage) Add(ctx context.Context, mem types.Memory, embedding []float32) (*types.Memory, error) {
@@ -44,10 +46,12 @@ func (m *mockStorage) Add(ctx context.Context, mem types.Memory, embedding []flo
 }
 
 func (m *mockStorage) Search(ctx context.Context, embedding []float32, opts types.SearchOpts) ([]types.Memory, error) {
+	m.searchRepo = opts.Repo
 	return m.memories, nil
 }
 
 func (m *mockStorage) List(ctx context.Context, opts types.ListOpts) ([]types.Memory, error) {
+	m.listRepo = opts.Repo
 	// Apply offset and limit
 	start := opts.Offset
 	if start > len(m.memories) {
@@ -81,6 +85,23 @@ func (m *mockStorage) Invalidate(ctx context.Context, id int64, supersededBy *in
 
 func (m *mockStorage) Close() error {
 	return nil
+}
+
+func setupTestServerWithStore() (*mockStorage, *chi.Mux) {
+	store := &mockStorage{}
+	emb := &mockEmbedder{}
+	svc := service.New(store, emb)
+	handlers := api.NewHandlers(svc)
+
+	r := chi.NewRouter()
+	r.Use(api.GitContext)
+	r.Get("/health", handlers.Health)
+	r.Post("/v1/memories", handlers.Add)
+	r.Post("/v1/memories/search", handlers.Search)
+	r.Get("/v1/memories", handlers.List)
+	r.Put("/v1/memories/{id}/invalidate", handlers.Invalidate)
+
+	return store, r
 }
 
 func setupTestServer() (*api.Handlers, *chi.Mux) {
@@ -345,5 +366,75 @@ func TestInvalidate(t *testing.T) {
 
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("expected status 404 for not found, got %d", rr.Code)
+	}
+}
+
+func TestSearch_FallsBackToContextRepo(t *testing.T) {
+	store, r := setupTestServerWithStore()
+
+	// No repo in the body, but X-EC-Repo header set (valid owner/repo format).
+	body, _ := json.Marshal(apitypes.SearchRequest{Query: "anything"})
+	req := httptest.NewRequest("POST", "/v1/memories/search", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-EC-Repo", "owner/repo-from-header")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if store.searchRepo != "owner/repo-from-header" {
+		t.Fatalf("Search should scope to X-EC-Repo when body repo empty; got %q", store.searchRepo)
+	}
+}
+
+func TestSearch_ExplicitBodyRepoWins(t *testing.T) {
+	store, r := setupTestServerWithStore()
+
+	body, _ := json.Marshal(apitypes.SearchRequest{Query: "anything", Repo: "owner/explicit"})
+	req := httptest.NewRequest("POST", "/v1/memories/search", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-EC-Repo", "owner/repo-from-header")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if store.searchRepo != "owner/explicit" {
+		t.Fatalf("explicit body repo should win; got %q", store.searchRepo)
+	}
+}
+
+func TestList_FallsBackToContextRepo(t *testing.T) {
+	store, r := setupTestServerWithStore()
+
+	// No repo query param, but X-EC-Repo header set.
+	req := httptest.NewRequest("GET", "/v1/memories", nil)
+	req.Header.Set("X-EC-Repo", "owner/repo-from-header")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if store.listRepo != "owner/repo-from-header" {
+		t.Fatalf("List should scope to X-EC-Repo when query repo empty; got %q", store.listRepo)
+	}
+}
+
+func TestList_ExplicitQueryRepoWins(t *testing.T) {
+	store, r := setupTestServerWithStore()
+
+	req := httptest.NewRequest("GET", "/v1/memories?repo=owner%2Fexplicit", nil)
+	req.Header.Set("X-EC-Repo", "owner/repo-from-header")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if store.listRepo != "owner/explicit" {
+		t.Fatalf("explicit query repo should win; got %q", store.listRepo)
 	}
 }

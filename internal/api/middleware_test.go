@@ -39,6 +39,39 @@ func TestGitContext(t *testing.T) {
 	}
 }
 
+func TestGitContext_RepoValues(t *testing.T) {
+	cases := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		// repo is a fail-safe partition key, never a path or auth boundary. Any
+		// value GetProjectID can emit must be accepted, or the request silently
+		// falls back to global (all-repos) scope. So accept any non-blank identity.
+		{"owner/repo", "myorg/myrepo", "myorg/myrepo"},
+		{"gitlab subgroup (multi-segment)", "group/subgroup/repo", "group/subgroup/repo"},
+		{"absolute path fallback", "/Users/ashortt/dev/engram-cogitator", "/Users/ashortt/dev/engram-cogitator"},
+		{"windows path fallback", `C:\Users\me\proj`, `C:\Users\me\proj`},
+		{"single token accepted", "garbage", "garbage"},
+		{"blank header → empty (no scope set)", "   ", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got string
+			handler := api.GitContext(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got = api.GetRepo(r.Context())
+				w.WriteHeader(http.StatusOK)
+			}))
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set("X-EC-Repo", tc.header)
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+			if got != tc.want {
+				t.Errorf("repo header %q → GetRepo = %q, want %q", tc.header, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRateLimiter(t *testing.T) {
 	rl := api.NewRateLimiter(3, 100*time.Millisecond)
 	defer rl.Stop()

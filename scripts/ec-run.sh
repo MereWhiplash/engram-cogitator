@@ -28,6 +28,11 @@ fi
 # Derive project name from cwd, sanitized for Docker container names
 PROJECT_DIR="$(pwd)"
 PROJECT_SHORT="$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g')"
+
+# Project identity: reuse the shim's GetProjectID (owner/repo, else path) so the
+# fallback server keys memories the same way the shared-api shim does.
+REPO_ID="$PROJECT_DIR"
+[ -x "$ENGRAM_DIR/ec-shim" ] && REPO_ID="$("$ENGRAM_DIR/ec-shim" --project-id 2>/dev/null || echo "$PROJECT_DIR")"
 WRAPPER_PID=$$
 CONTAINER_NAME="ec-mcp-${PROJECT_SHORT}-${WRAPPER_PID}"
 HOST_NAME="$(hostname -s 2>/dev/null || hostname)"
@@ -132,7 +137,7 @@ docker run -i \
     ${VOLUME_ARGS} \
     "$EC_IMAGE" \
     ${STORAGE_ARGS} \
-    --repo "$PROJECT_DIR" \
+    --repo "$REPO_ID" \
     --ollama-url http://engram-ollama:11434
 DOCKER_EXIT=$?
 

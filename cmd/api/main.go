@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -26,12 +27,24 @@ import (
 // version is set by goreleaser via ldflags
 var version = "dev"
 
+// expandPath expands ~ to home directory in paths
+func expandPath(path string) string {
+	if len(path) > 0 && path[0] == '~' {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, path[1:])
+		}
+	}
+	return path
+}
+
 func main() {
 	// Server flags
 	addr := flag.String("addr", ":8080", "Server address")
 
 	// Storage flags
-	storageDriver := flag.String("storage-driver", "postgres", "Storage driver: postgres, mongodb")
+	storageDriver := flag.String("storage-driver", "postgres", "Storage driver: sqlite, postgres, mongodb")
+	dbPath := flag.String("db-path", "", "Path to SQLite database (sqlite driver)")
 	postgresDSN := flag.String("postgres-dsn", "", "PostgreSQL connection string")
 	mongoURI := flag.String("mongodb-uri", "", "MongoDB connection URI")
 	mongoDatabase := flag.String("mongodb-database", "engram", "MongoDB database name")
@@ -61,17 +74,15 @@ func main() {
 
 	ctx := context.Background()
 
-	// Build storage config (no sqlite for API server - team mode only)
-	cfg := storage.Config{
-		Driver:          *storageDriver,
-		PostgresDSN:     *postgresDSN,
-		MongoDBURI:      *mongoURI,
-		MongoDBDatabase: *mongoDatabase,
+	// Build storage config (sqlite permitted: single shared local api process)
+	cfg, err := buildStorageConfig(*storageDriver, expandPath(*dbPath), *postgresDSN, *mongoURI, *mongoDatabase)
+	if err != nil {
+		log.Fatalf("storage config: %v", err)
 	}
-
-	// Validate config
 	if cfg.Driver == "sqlite" {
-		log.Fatal("SQLite not supported for API server - use postgres or mongodb")
+		if err := os.MkdirAll(filepath.Dir(cfg.SQLitePath), 0o755); err != nil {
+			log.Fatalf("failed to create db dir: %v", err)
+		}
 	}
 
 	// Initialize storage
