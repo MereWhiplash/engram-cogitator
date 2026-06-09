@@ -4,7 +4,7 @@ package api
 import (
 	"context"
 	"net/http"
-	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,9 +23,6 @@ const (
 
 // MaxRequestBodySize is the maximum allowed request body size (1MB)
 const MaxRequestBodySize = 1 << 20
-
-// repoPattern accepts "owner/repo" or an absolute path (GetProjectID's fallback).
-var repoPattern = regexp.MustCompile(`^(/.+|[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)$`)
 
 // RequestID adds a unique request ID to each request
 func RequestID(next http.Handler) http.Handler {
@@ -67,12 +64,12 @@ func GitContext(next http.Handler) http.Handler {
 		if email := r.Header.Get("X-EC-Author-Email"); email != "" {
 			ctx = context.WithValue(ctx, AuthorEmailKey, email)
 		}
-		if repo := r.Header.Get("X-EC-Repo"); repo != "" {
-			// Validate repo format (owner/repo)
-			if repoPattern.MatchString(repo) {
-				ctx = context.WithValue(ctx, RepoKey, repo)
-			}
-			// Invalid format is silently ignored - repo will be empty
+		// repo is a fail-safe partition key (parameterized, never a path or auth
+		// boundary). Accept any non-blank identity GetProjectID may emit —
+		// owner/repo, multi-segment subgroups, or an absolute/Windows path.
+		// Rejecting a valid identity would silently fall back to global scope.
+		if repo := strings.TrimSpace(r.Header.Get("X-EC-Repo")); repo != "" {
+			ctx = context.WithValue(ctx, RepoKey, repo)
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))

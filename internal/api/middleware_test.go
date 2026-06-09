@@ -45,12 +45,15 @@ func TestGitContext_RepoValues(t *testing.T) {
 		header string
 		want   string
 	}{
-		// Real solo-mode value: GetProjectID() falls back to an absolute path for
-		// repos without a remote, so the path form must be accepted (not dropped).
-		{"absolute path", "/Users/ashortt/dev/engram-cogitator", "/Users/ashortt/dev/engram-cogitator"},
-		{"owner/repo still accepted", "myorg/myrepo", "myorg/myrepo"},
-		{"single token rejected", "garbage", ""},
-		{"relative path rejected", "../etc/passwd", ""},
+		// repo is a fail-safe partition key, never a path or auth boundary. Any
+		// value GetProjectID can emit must be accepted, or the request silently
+		// falls back to global (all-repos) scope. So accept any non-blank identity.
+		{"owner/repo", "myorg/myrepo", "myorg/myrepo"},
+		{"gitlab subgroup (multi-segment)", "group/subgroup/repo", "group/subgroup/repo"},
+		{"absolute path fallback", "/Users/ashortt/dev/engram-cogitator", "/Users/ashortt/dev/engram-cogitator"},
+		{"windows path fallback", `C:\Users\me\proj`, `C:\Users\me\proj`},
+		{"single token accepted", "garbage", "garbage"},
+		{"blank header → empty (no scope set)", "   ", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
