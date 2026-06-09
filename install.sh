@@ -136,12 +136,13 @@ detect_platform() {
 
 # Resolve the latest release tag (ported from install-team.sh). Honors GITHUB_TOKEN.
 fetch_shim_version() {
-    local auth_header=""
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-        auth_header="-H \"Authorization: token $GITHUB_TOKEN\""
+    local curl_args=(-s) response
+    [ -n "${GITHUB_TOKEN:-}" ] && curl_args+=(-H "Authorization: token $GITHUB_TOKEN")
+    response=$(curl "${curl_args[@]}" https://api.github.com/repos/MereWhiplash/engram-cogitator/releases/latest)
+    if echo "$response" | grep -q "API rate limit exceeded"; then
+        echo "GitHub API rate limit exceeded; set GITHUB_TOKEN or SHIM_VERSION to override." >&2
+        return 0
     fi
-    local response
-    response=$(eval curl -s "$auth_header" https://api.github.com/repos/MereWhiplash/engram-cogitator/releases/latest)
     echo "$response" | grep tag_name | cut -d '"' -f 4
 }
 
@@ -207,35 +208,42 @@ acquire_shim() {
     return 1
 }
 
-# Start the singleton shared api (after ollama is up). Mirrors the ollama block's
-# idempotency: running -> noop, stopped -> start, missing -> docker run.
+# Start (recreate) the singleton shared api after ollama is up. Always recreates
+# so the freshly pulled image is applied — a running --restart=unless-stopped
+# container would otherwise keep serving the old image across upgrades.
 start_shared_api() {
-    local db_path="$ENGRAM_DIR/memory.db"
+    local db_path="$ENGRAM_DIR/memory.db" db_dir port
     # shellcheck source=/dev/null
     [ -f "$ENGRAM_DIR/config" ] && . "$ENGRAM_DIR/config"
     [ -n "${EC_DB_PATH:-}" ] && db_path="$EC_DB_PATH"
+    db_dir="$(dirname "$db_path")"            # mount the DB's own dir (honor custom EC_DB_PATH)
+    port="${EC_API_PORT:-8080}"              # match ec-ensure-api.sh's published port
 
-    if docker ps --format '{{.Names}}' | grep -q "^${API_NAME}$"; then
-        echo -e "${GREEN}Shared api already running.${NC}"
-        return 0
-    fi
-    if docker ps -a --format '{{.Names}}' | grep -q "^${API_NAME}$"; then
-        echo -e "${YELLOW}Starting existing shared api...${NC}"
-        docker start "$API_NAME" &>/dev/null
-        return 0
-    fi
-    echo -e "${YELLOW}Starting shared api (${API_NAME})...${NC}"
+    docker rm -f "$API_NAME" &>/dev/null || true
+    echo -e "${YELLOW}Starting shared api (${API_NAME}) on 127.0.0.1:${port}...${NC}"
     docker run -d \
         --name "$API_NAME" \
         --restart unless-stopped \
         --network engram-network \
-        -p "127.0.0.1:8080:8080" \
-        -v "$ENGRAM_DIR:/data" \
+        -p "127.0.0.1:${port}:8080" \
+        -v "$db_dir:/data" \
         "$EC_IMAGE" \
         --addr ":8080" \
         --storage-driver sqlite \
         --db-path "/data/$(basename "$db_path")" \
         --ollama-url http://engram-ollama:11434 &>/dev/null
+
+    # Surface a failed start loudly rather than leaving the user with no api.
+    for _ in $(seq 1 20); do
+        if curl -fsS "http://127.0.0.1:${port}/health" &>/dev/null; then
+            echo -e "${GREEN}Shared api healthy.${NC}"
+            return 0
+        fi
+        sleep 0.5
+    done
+    echo -e "${RED}WARNING: shared api did not become healthy on 127.0.0.1:${port}.${NC}"
+    echo -e "${RED}  Inspect with: docker logs ${API_NAME}${NC}"
+    return 0
 }
 
 # Re-key path-style repos (old --repo "$(pwd)" scheme) to GetProjectID's owner/repo,
@@ -250,15 +258,24 @@ migrate_repo_keys() {
     paths=$(sqlite3 "$db" "SELECT DISTINCT repo FROM memories WHERE repo LIKE '/%';" 2>/dev/null) || return 0
     [ -n "$paths" ] || { echo -e "${GREEN}No path-keyed memories to migrate.${NC}"; return 0; }
 
-    local dry="${EC_MIGRATE_DRY_RUN:-}"
+    # WAL-consistent backup (plain cp misses uncheckpointed -wal); never clobber an
+    # existing .bak (preserve the oldest pre-migration snapshot); abort if it fails.
+    local dry="${EC_MIGRATE_DRY_RUN:-}" bak="${db}.bak"
     if [ -z "$dry" ]; then
-        cp "$db" "${db}.bak" && echo -e "${CYAN}Backed up ${db} -> ${db}.bak${NC}"
+        if [ -f "$bak" ]; then
+            echo -e "${CYAN}Backup already exists at ${bak}; keeping it.${NC}"
+        elif sqlite3 "$db" ".backup '${bak//\'/\'\'}'"; then
+            echo -e "${CYAN}Backed up ${db} -> ${bak}${NC}"
+        else
+            echo -e "${RED}Backup failed; aborting migration (no rows changed).${NC}"
+            return 1
+        fi
     fi
 
     echo "$paths" | while IFS= read -r path; do
         [ -n "$path" ] || continue
         local n id esc_path esc_id
-        n=$(sqlite3 "$db" "SELECT COUNT(*) FROM memories WHERE repo='${path//\'/\'\'}';")
+        n=$(sqlite3 "$db" "SELECT COUNT(*) FROM memories WHERE repo='${path//\'/\'\'}';" 2>/dev/null) || n="?"
         if [ ! -d "$path" ]; then
             echo -e "  ${YELLOW}skip${NC} ${path} (dir gone, ${n} rows stay path-keyed)"
             continue
@@ -271,9 +288,10 @@ migrate_repo_keys() {
         esc_path="${path//\'/\'\'}"; esc_id="${id//\'/\'\'}"
         if [ -n "$dry" ]; then
             echo -e "  would migrate ${path} -> ${id} (${n} rows)"
-        else
-            sqlite3 "$db" "UPDATE memories SET repo='${esc_id}' WHERE repo='${esc_path}';"
+        elif sqlite3 "$db" "UPDATE memories SET repo='${esc_id}' WHERE repo='${esc_path}';" 2>/dev/null; then
             echo -e "  ${GREEN}migrated${NC} ${path} -> ${id} (${n} rows)"
+        else
+            echo -e "  ${RED}FAILED${NC} ${path} (left path-keyed; retry after closing other Claude windows)"
         fi
     done
 }
@@ -388,11 +406,11 @@ docker pull ${EC_IMAGE} 2>/dev/null || {
 # The shared-api model solves the local SQLite multi-writer problem. Postgres/MongoDB
 # solo users already point at external shared storage (no local contention) and the
 # launcher is sqlite-only — keep them on ec-run.sh to avoid a silent driver switch.
-CONFIGURED_DRIVER="sqlite"
-if [ -f "$ENGRAM_DIR/config" ]; then
-    CONFIGURED_DRIVER="$(grep -E '^EC_STORAGE_DRIVER=' "$ENGRAM_DIR/config" | cut -d '=' -f2)"
-    CONFIGURED_DRIVER="${CONFIGURED_DRIVER:-sqlite}"
-fi
+# Load persisted storage config (driver + custom DB path) into this shell so the
+# migration and launcher selection see the same values start_shared_api does.
+# shellcheck source=/dev/null
+[ -f "$ENGRAM_DIR/config" ] && . "$ENGRAM_DIR/config"
+CONFIGURED_DRIVER="${EC_STORAGE_DRIVER:-sqlite}"
 
 # Acquire a native ec-shim (sqlite only). On success, register the shared-api
 # launcher; otherwise fall back to the per-session ec-run.sh wrapper.
@@ -604,12 +622,16 @@ fi
 echo -e "${YELLOW}Pulling embedding model (${EMBEDDING_MODEL})...${NC}"
 docker exec engram-ollama ollama pull ${EMBEDDING_MODEL}
 
-# Migrate repo keys, then start the singleton api (shared-api / sqlite path only).
-if [ "$EC_LAUNCHER" = "ec-ensure-api.sh" ]; then
-    DB_PATH_FOR_MIGRATE="$ENGRAM_DIR/memory.db"
-    [ -n "${EC_DB_PATH:-}" ] && DB_PATH_FOR_MIGRATE="$EC_DB_PATH"
+# Migrate repo keys for any sqlite install with a native shim: both the shared-api
+# launcher and the ec-run.sh fallback key by owner/repo once a shim exists, so both
+# need the historical path-keyed rows re-keyed.
+if [ "$CONFIGURED_DRIVER" = "sqlite" ] && [ -x "$ENGRAM_DIR/ec-shim" ]; then
     echo -e "${YELLOW}Migrating repo keys to owner/repo...${NC}"
-    migrate_repo_keys "$DB_PATH_FOR_MIGRATE"
+    migrate_repo_keys "${EC_DB_PATH:-$ENGRAM_DIR/memory.db}"
+fi
+
+# Start the singleton api only when the shared-api launcher is registered.
+if [ "$EC_LAUNCHER" = "ec-ensure-api.sh" ]; then
     start_shared_api
 fi
 

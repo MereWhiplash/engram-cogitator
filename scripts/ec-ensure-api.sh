@@ -16,6 +16,8 @@ docker image inspect "$EC_IMAGE" &>/dev/null || EC_IMAGE="engram-cogitator:local
 EC_DB_PATH="$ENGRAM_DIR/memory.db"
 # shellcheck source=/dev/null
 [ -f "$ENGRAM_DIR/config" ] && . "$ENGRAM_DIR/config"
+# Mount the DB's own directory so a custom EC_DB_PATH outside ~/.engram is honored.
+EC_DB_DIR="$(dirname "$EC_DB_PATH")"
 
 # NOTE: the image's default ENTRYPOINT is already /ec-api (Dockerfile), so no --entrypoint needed.
 DOCKER_RUN=(docker run -d
@@ -23,7 +25,7 @@ DOCKER_RUN=(docker run -d
   --restart unless-stopped
   --network "$NETWORK"
   -p "127.0.0.1:${PORT}:8080"
-  -v "$ENGRAM_DIR:/data"
+  -v "$EC_DB_DIR:/data"
   "$EC_IMAGE"
   --addr ":8080"
   --storage-driver sqlite
