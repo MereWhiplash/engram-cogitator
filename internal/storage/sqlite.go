@@ -24,22 +24,16 @@ type SQLite struct {
 func NewSQLite(path string) (*SQLite, error) {
 	sqlite_vec.Auto()
 
-	conn, err := sql.Open("sqlite3", path)
+	// Pragmas go in the DSN, not a one-time Exec: busy_timeout is per-connection,
+	// so it must re-apply on any connection database/sql reopens. journal_mode=WAL
+	// is persistent in the DB header but harmless to repeat.
+	dsn := path + "?_journal_mode=WAL&_busy_timeout=5000"
+	conn, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-	// database/sql pools connections even in one process; serialize + harden for it.
+	// database/sql pools connections even in one process; one writer serializes them.
 	conn.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := conn.Exec(pragma); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("failed to set %q: %w", pragma, err)
-		}
-	}
 
 	s := &SQLite{conn: conn}
 	if err := s.initSchema(); err != nil {
