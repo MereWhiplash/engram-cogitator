@@ -42,6 +42,18 @@ teardown() { rm -rf "$TMP"; }
   [[ "$output" == *"default cogitation profile"* ]]
 }
 
+@test "wrong-typed but valid JSON: degrades, no crash" {
+  printf '{"workflow":"nope"}' > "$TMP/c.json"
+  EC_COG_CONFIG="$TMP/c.json" run bash cogitation/hooks/session-start.sh
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"default cogitation profile"* ]]
+
+  printf '{"workflow":{"customized":true,"skills":"nope"}}' > "$TMP/c.json"
+  EC_COG_CONFIG="$TMP/c.json" run bash cogitation/hooks/session-start.sh
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hookSpecificOutput"* ]]
+}
+
 @test "hook passes shellcheck" {
   run shellcheck cogitation/hooks/session-start.sh
   [ "$status" -eq 0 ]

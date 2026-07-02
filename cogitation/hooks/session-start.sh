@@ -37,8 +37,12 @@ if raw:
         cfg = {}
 if not isinstance(cfg, dict):
     cfg = {}
-workflow = cfg.get("workflow") or {}
-skills = workflow.get("skills") or {}
+workflow = cfg.get("workflow")
+if not isinstance(workflow, dict):
+    workflow = {}
+skills = workflow.get("skills")
+if not isinstance(skills, dict):
+    skills = {}
 customized = bool(workflow.get("customized"))
 
 posture = []
