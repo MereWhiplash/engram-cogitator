@@ -32,11 +32,36 @@ DOCKER_RUN=(docker run -d
   --db-path "/data/$(basename "$EC_DB_PATH")"
   --ollama-url http://engram-ollama:11434)
 
-if [ -n "${EC_DRY_RUN:-}" ]; then printf '%s ' "${DOCKER_RUN[@]}"; echo; exit 0; fi
+# The embedder: without it the API is "healthy" but 500s on every add/search.
+OLLAMA_NAME="engram-ollama"
+OLLAMA_IMAGE="${EC_OLLAMA_IMAGE:-ollama/ollama:latest}"
+OLLAMA_RUN=(docker run -d
+  --name "$OLLAMA_NAME"
+  --restart unless-stopped
+  --network "$NETWORK"
+  -v ollama_data:/root/.ollama
+  "$OLLAMA_IMAGE")
+
+if [ -n "${EC_DRY_RUN:-}" ]; then
+  printf '%s ' "${DOCKER_RUN[@]}"; echo
+  printf '%s ' "${OLLAMA_RUN[@]}"; echo
+  exit 0
+fi
 
 # Ensure docker + network
 command -v docker >/dev/null || { echo "docker not found; use ec-run.sh offline fallback" >&2; exit 1; }
 docker network inspect "$NETWORK" &>/dev/null || docker network create "$NETWORK" &>/dev/null || true
+
+# Ensure the embedder up first (the API depends on it for every add/search).
+# docker update fixes legacy containers created without a restart policy —
+# that gap once left the embedder down for weeks while the API stayed "up".
+ostate="$(docker inspect -f '{{.State.Running}}' "$OLLAMA_NAME" 2>/dev/null || echo missing)"
+case "$ostate" in
+  true) : ;;
+  false) docker start "$OLLAMA_NAME" &>/dev/null ;;
+  *) "${OLLAMA_RUN[@]}" &>/dev/null ;;
+esac
+docker update --restart unless-stopped "$OLLAMA_NAME" &>/dev/null || true
 
 # Ensure singleton api up
 state="$(docker inspect -f '{{.State.Running}}' "$API_NAME" 2>/dev/null || echo missing)"

@@ -16,3 +16,13 @@
   [[ "$output" == *"--name engram-cogitator-api"* ]]
   [[ "$output" == *"--storage-driver sqlite"* ]]
 }
+
+@test "dry-run prints ollama ensure with volume and restart policy" {
+  EC_DRY_RUN=1 run bash scripts/ec-ensure-api.sh
+  [[ "$output" == *"--name engram-ollama"* ]]
+  [[ "$output" == *"ollama_data:/root/.ollama"* ]]
+  [[ "$output" == *"ollama/ollama"* ]]
+  # both containers get a restart policy — an unrestarted embedder 500s the API
+  ollama_line="$(printf '%s\n' "$output" | grep -- '--name engram-ollama')"
+  [[ "$ollama_line" == *"--restart unless-stopped"* ]]
+}
