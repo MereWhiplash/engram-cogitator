@@ -27,3 +27,10 @@ teardown() { rm -rf "$TMP"; }
   [[ "$output" == *"\`tdd\` rigidity is **advisory**"* ]]
   [[ "$output" != *"\`verifying\` rigidity"* ]]   # strict is the default → no line
 }
+
+@test "enabled:false emits a DISABLED posture line" {
+  printf '{"workflow":{"customized":true,"skills":{"finishing-branch":{"enabled":false}}}}' > "$TMP/c.json"
+  EC_COG_CONFIG="$TMP/c.json" run bash cogitation/hooks/session-start.sh
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"\`finishing-branch\` is DISABLED"* ]]
+}
