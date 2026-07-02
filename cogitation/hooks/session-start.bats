@@ -34,3 +34,15 @@ teardown() { rm -rf "$TMP"; }
   [ "$status" -eq 0 ]
   [[ "$output" == *"\`finishing-branch\` is DISABLED"* ]]
 }
+
+@test "malformed config: treated as uncustomized, no crash" {
+  printf 'not json {{{' > "$TMP/bad.json"
+  EC_COG_CONFIG="$TMP/bad.json" run bash cogitation/hooks/session-start.sh
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"default cogitation profile"* ]]
+}
+
+@test "hook passes shellcheck" {
+  run shellcheck cogitation/hooks/session-start.sh
+  [ "$status" -eq 0 ]
+}
