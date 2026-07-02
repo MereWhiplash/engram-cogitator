@@ -19,3 +19,11 @@ teardown() { rm -rf "$TMP"; }
   [ "$status" -eq 0 ]
   [[ "$output" != *"default cogitation profile"* ]]
 }
+
+@test "advisory rigidity emits a posture line; strict does not" {
+  printf '{"workflow":{"customized":true,"skills":{"tdd":{"rigidity":"advisory"},"verifying":{"rigidity":"strict"}}}}' > "$TMP/c.json"
+  EC_COG_CONFIG="$TMP/c.json" run bash cogitation/hooks/session-start.sh
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"\`tdd\` rigidity is **advisory**"* ]]
+  [[ "$output" != *"\`verifying\` rigidity"* ]]   # strict is the default → no line
+}
