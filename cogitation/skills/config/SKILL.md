@@ -124,13 +124,29 @@ A version-controlled, per-repo file. All keys optional; omitted = off. To change
 {
   "review":   { "defaultTier": "inline" },     // inline (Tier 0) | subagent (Tier 1)
   "codex":    { "enabled": false },             // Tier 2 codex-review (needs codex on PATH)
-  "graphify": { "enabled": false, "strict": true, "outDir": "graphify-out" }
+  "graphify": { "enabled": false, "strict": true, "outDir": "graphify-out" },
+  "workflow": {
+    "customized": true,                         // the silent setup gate (suppresses the nudge)
+    "skills": {
+      "tdd":              { "rigidity": "advisory" },
+      "finishing-branch": { "enabled": false }
+    }
+  }
 }
 ```
 
 - **`graphify.enabled`** — when `true`, `onboard`/`brainstorming` MUST run graphify structural recon (`graphify update .` builds the AST graph with no model/API key; then `graphify query`). When `false`/absent, graphify is never used.
 - **`codex.enabled`** — when `true`, the review ladder may escalate to `@codex-review` (docs) / `/codex:adversarial-review` (code). When `false`, stay at Tier 0/1.
 - **`review.defaultTier`** — default review tier for `executing-plans`.
+- **`workflow`** — the customization manifest, **deltas only**: it stores what
+  the user changed, never a copy of the defaults, so plugin updates flow
+  through with nothing to merge. `customized` (bool) is the silent setup gate.
+  `skills.<name>.enabled` (bool, `false` = not routed to) and
+  `skills.<name>.rigidity` (`"strict"` | `"advisory"` — advisory means
+  recommended, not mandatory). The SessionStart hook resolves these into the
+  injected posture. Prefer editing via the **customising** skill — it
+  advocates for the affected core value and records the decision in EC —
+  rather than hand-editing.
 
 ## Quick Commands
 

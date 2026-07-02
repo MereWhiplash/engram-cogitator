@@ -58,7 +58,7 @@ ec_search: cogitation initialized
 Create standard directories if they don't exist:
 
 ```bash
-mkdir -p docs/designs docs/plans
+mkdir -p docs/designs docs/plans docs/sketches
 ```
 
 ## Step 4: Detect Project Stack
@@ -163,6 +163,11 @@ ec_add:
   rationale: Marker for init detection
 ```
 
+**Workflow gate:** if you write `.cogitation/config.json`, leave
+`workflow.customized` **unset** — the first session then shows the one-time
+default-profile nudge, and the silent gate handles the rest. Do not force
+customization at init.
+
 ## Step 8: Summary
 
 Present what was set up:
@@ -185,3 +190,5 @@ Suggest next steps based on context:
 - New feature idea → **Use @brainstorming**
 - Existing bug → **Use @debugging**
 - Want to understand workflows → List available skills
+- Want to tailor the workflow now? → **Use @customising** (or say "customise"
+  any time — the default profile works as-is)
