@@ -2,7 +2,9 @@ package shim_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -235,6 +237,43 @@ func TestShimHandler_Search_NoResults(t *testing.T) {
 	}
 	if len(output.Memories) != 0 {
 		t.Errorf("expected 0 memories, got %d", len(output.Memories))
+	}
+}
+
+// Error-path outputs must still satisfy the output schema: a nil Memories
+// slice marshals to null, which fails SDK output validation and masks the
+// real error (seen live when the embedder was down).
+func TestShimHandler_Search_ClientError_OutputMarshalsMemoriesAsArray(t *testing.T) {
+	client := &mockAPIClient{searchErr: errors.New("api down")}
+	handler := shim.NewHandler(client)
+
+	result, output, _ := handler.Search(context.Background(), nil, mcptypes.SearchInput{Query: "anything"})
+	if !result.IsError {
+		t.Fatal("expected error result when client fails")
+	}
+	b, err := json.Marshal(output)
+	if err != nil {
+		t.Fatalf("marshal output: %v", err)
+	}
+	if !strings.Contains(string(b), `"memories":[]`) {
+		t.Errorf("error-path output must marshal memories as [], got %s", b)
+	}
+}
+
+func TestShimHandler_List_ClientError_OutputMarshalsMemoriesAsArray(t *testing.T) {
+	client := &mockAPIClient{listErr: errors.New("api down")}
+	handler := shim.NewHandler(client)
+
+	result, output, _ := handler.List(context.Background(), nil, mcptypes.ListInput{})
+	if !result.IsError {
+		t.Fatal("expected error result when client fails")
+	}
+	b, err := json.Marshal(output)
+	if err != nil {
+		t.Fatalf("marshal output: %v", err)
+	}
+	if !strings.Contains(string(b), `"memories":[]`) {
+		t.Errorf("error-path output must marshal memories as [], got %s", b)
 	}
 }
 

@@ -77,6 +77,19 @@ func ErrorResult(msg string) *mcp.CallToolResult {
 	}
 }
 
+// EmptySearchOutput returns a SearchOutput whose memories field marshals as
+// [] rather than null — the SDK validates structured output against the
+// schema even on error results, so a nil slice masks the real error.
+func EmptySearchOutput() SearchOutput {
+	return SearchOutput{Memories: []types.Memory{}}
+}
+
+// EmptyListOutput returns a ListOutput whose memories field marshals as []
+// rather than null (see EmptySearchOutput).
+func EmptyListOutput() ListOutput {
+	return ListOutput{Memories: []types.Memory{}}
+}
+
 // DefaultSearchLimit returns a default limit for search operations
 func DefaultSearchLimit(limit int) int {
 	if limit <= 0 {
