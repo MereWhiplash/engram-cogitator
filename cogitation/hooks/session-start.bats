@@ -12,3 +12,10 @@ teardown() { rm -rf "$TMP"; }
   [[ "$output" == *"customise"* ]]
   [[ "$output" == *"default cogitation profile"* ]]
 }
+
+@test "customized=true: no nudge" {
+  printf '{"workflow":{"customized":true}}' > "$TMP/c.json"
+  EC_COG_CONFIG="$TMP/c.json" run bash cogitation/hooks/session-start.sh
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"default cogitation profile"* ]]
+}
