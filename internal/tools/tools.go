@@ -67,7 +67,7 @@ func (h *Handler) Add(ctx context.Context, req *mcp.CallToolRequest, input mcpty
 
 func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input mcptypes.SearchInput) (*mcp.CallToolResult, mcptypes.SearchOutput, error) {
 	if input.Query == "" {
-		return mcptypes.ErrorResult("query is required"), mcptypes.SearchOutput{}, nil
+		return mcptypes.ErrorResult("query is required"), mcptypes.EmptySearchOutput(), nil
 	}
 
 	limit := mcptypes.DefaultSearchLimit(input.Limit)
@@ -82,12 +82,12 @@ func (h *Handler) Search(ctx context.Context, req *mcp.CallToolRequest, input mc
 	}
 
 	if err != nil {
-		return mcptypes.ErrorResult(fmt.Sprintf("failed to search: %v", err)), mcptypes.SearchOutput{}, nil
+		return mcptypes.ErrorResult(fmt.Sprintf("failed to search: %v", err)), mcptypes.EmptySearchOutput(), nil
 	}
 
 	result, fmtErr := mcptypes.MemoriesResult(memories, "No matching memories found.")
 	if fmtErr != nil {
-		return mcptypes.ErrorResult(fmtErr.Error()), mcptypes.SearchOutput{}, nil
+		return mcptypes.ErrorResult(fmtErr.Error()), mcptypes.EmptySearchOutput(), nil
 	}
 	if memories == nil {
 		memories = []types.Memory{}
@@ -126,12 +126,12 @@ func (h *Handler) List(ctx context.Context, req *mcp.CallToolRequest, input mcpt
 	}
 
 	if err != nil {
-		return mcptypes.ErrorResult(fmt.Sprintf("failed to list: %v", err)), mcptypes.ListOutput{}, nil
+		return mcptypes.ErrorResult(fmt.Sprintf("failed to list: %v", err)), mcptypes.EmptyListOutput(), nil
 	}
 
 	result, fmtErr := mcptypes.MemoriesResult(memories, "No memories found.")
 	if fmtErr != nil {
-		return mcptypes.ErrorResult(fmtErr.Error()), mcptypes.ListOutput{}, nil
+		return mcptypes.ErrorResult(fmtErr.Error()), mcptypes.EmptyListOutput(), nil
 	}
 	if memories == nil {
 		memories = []types.Memory{}
